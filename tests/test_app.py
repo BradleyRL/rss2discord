@@ -7,8 +7,8 @@ from src.rss2discord.models import FeedConfig, WebhookConfig, RouteConfig, FeedI
 from src.rss2discord.storage import Storage
 from src.rss2discord.rss_parser import clean_html_to_markdown, extract_image_url
 from src.rss2discord.engine import matches_filters
-from src.rss2discord.discord_client import DiscordWebhookClient, hex_to_int
-from src.rss2discord.web.server import create_app
+from src.rss2discord.discord_client import DiscordWebhookClient, hex_to_int, sanitize_username
+from src.rss2discord.web.server. import create_app
 
 class TestRSS2Discord(unittest.TestCase):
     def setUp(self):
@@ -77,6 +77,11 @@ class TestRSS2Discord(unittest.TestCase):
     def test_hex_color(self):
         self.assertEqual(hex_to_int("#FF0000"), 0xFF0000)
         self.assertEqual(hex_to_int("5865F2"), 0x5865F2)
+
+    def test_username_sanitization(self):
+        self.assertEqual(sanitize_username("RSS-to-Discord Router"), "RSS-to-FeedHub Router")
+        self.assertEqual(sanitize_username("Discord Updates"), "FeedHub Updates")
+        self.assertEqual(sanitize_username("clyde@bot"), "Botbot")
 
     def test_basic_auth(self):
         # App with Basic Auth enabled

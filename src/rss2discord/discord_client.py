@@ -1,6 +1,7 @@
 import httpx
 import time
 import logging
+import re
 from typing import Optional, Dict, Any, Tuple
 from .models import WebhookConfig, FeedItem, FeedConfig, RouteConfig
 
@@ -12,6 +13,16 @@ def hex_to_int(hex_str: str) -> int:
         return int(hex_str, 16)
     except ValueError:
         return 0x5865F2  # Discord Blurple default
+
+def sanitize_username(name: Optional[str]) -> Optional[str]:
+    if not name:
+        return None
+    # Discord API restricts usernames containing "discord", "clyde", "@", ":", or "```"
+    sanitized = re.sub(r'discord', 'FeedHub', name, flags=re.IGNORECASE)
+    sanitized = re.sub(r'clyde', 'Bot', sanitized, flags=re.IGNORECASE)
+    sanitized = re.sub(r'[@:`]', '', sanitized)
+    sanitized = sanitized.strip()[:80]
+    return sanitized or "RSS Feed Router"
 
 class DiscordWebhookClient:
     def __init__(self, timeout: float = 10.0):
@@ -61,10 +72,8 @@ class DiscordWebhookClient:
             "embeds": [embed]
         }
 
-        if webhook.username:
-            payload["username"] = webhook.username
-        else:
-            payload["username"] = f"RSS: {feed.name}"
+        raw_username = webhook.username or f"RSS: {feed.name}"
+        payload["username"] = sanitize_username(raw_username)
 
         if webhook.avatar_url:
             payload["avatar_url"] = webhook.avatar_url
@@ -76,14 +85,14 @@ class DiscordWebhookClient:
 
     def send_test_message(self, webhook_url: str, name: str = "Test Webhook") -> Tuple[bool, Optional[str]]:
         payload = {
-            "username": "RSS-to-Discord Router",
+            "username": "RSS Feed Router",
             "embeds": [
                 {
                     "title": "Webhook Connection Test Successful!",
                     "description": f"The Discord webhook for **{name}** is configured correctly and ready to receive RSS feed updates.",
                     "color": 0x57F287,  # Green
                     "footer": {
-                        "text": "RSS-to-Discord Router • Test System"
+                        "text": "RSS Feed Router • Test System"
                     }
                 }
             ]
