@@ -539,8 +539,11 @@
           <input type="text" id="feed-exclude" placeholder="crypto, sponsor">
         </div>
         <div class="form-group">
-          <label>Embed Accent Color (Hex, optional)</label>
-          <input type="text" id="feed-color" placeholder="#00F2FE">
+          <label>Embed Accent Color</label>
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <input type="color" id="feed-color-picker" value="#5865F2" style="width: 44px; height: 38px; border: 1px solid var(--border-color); border-radius: 8px; cursor: pointer; background: transparent; padding: 2px;" oninput="document.getElementById('feed-color').value = this.value">
+            <input type="text" id="feed-color" placeholder="#5865F2 (optional)" style="flex: 1;" oninput="syncColorPicker('feed-color', 'feed-color-picker')">
+          </div>
         </div>
         <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem;">
           <button type="button" class="btn btn-secondary" onclick="closeModal('feed-modal')">Cancel</button>
@@ -573,8 +576,11 @@
           <input type="url" id="webhook-avatar" placeholder="https://example.com/avatar.png">
         </div>
         <div class="form-group">
-          <label>Default Color (Hex)</label>
-          <input type="text" id="webhook-color" value="#5865F2">
+          <label>Default Color</label>
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <input type="color" id="webhook-color-picker" value="#5865F2" style="width: 44px; height: 38px; border: 1px solid var(--border-color); border-radius: 8px; cursor: pointer; background: transparent; padding: 2px;" oninput="document.getElementById('webhook-color').value = this.value">
+            <input type="text" id="webhook-color" value="#5865F2" style="flex: 1;" oninput="syncColorPicker('webhook-color', 'webhook-color-picker')">
+          </div>
         </div>
         <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem;">
           <button type="button" class="btn btn-secondary" onclick="closeModal('webhook-modal')">Cancel</button>
@@ -779,6 +785,20 @@
       }
     }
 
+    // Color Sync Helpers
+    function syncColorPicker(textId, pickerId) {
+      const val = document.getElementById(textId).value.trim();
+      if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+        document.getElementById(pickerId).value = val;
+      }
+    }
+    function setColorValues(textId, pickerId, val, defaultHex = '#5865F2') {
+      const hex = val || '';
+      document.getElementById(textId).value = hex;
+      const validHex = /^#[0-9A-Fa-f]{6}$/.test(hex) ? hex : defaultHex;
+      document.getElementById(pickerId).value = validHex;
+    }
+
     // Modal Helpers
     function openModal(id) { document.getElementById(id).classList.add('active'); }
     function closeModal(id) { document.getElementById(id).classList.remove('active'); }
@@ -787,6 +807,7 @@
       document.getElementById('feed-form').reset();
       document.getElementById('feed-id').value = '';
       document.getElementById('feed-modal-title').innerText = 'Add RSS Feed';
+      setColorValues('feed-color', 'feed-color-picker', '', '#5865F2');
       openModal('feed-modal');
     }
 
@@ -794,6 +815,7 @@
       document.getElementById('webhook-form').reset();
       document.getElementById('webhook-id').value = '';
       document.getElementById('webhook-modal-title').innerText = 'Add Discord Webhook';
+      setColorValues('webhook-color', 'webhook-color-picker', '#5865F2', '#5865F2');
       openModal('webhook-modal');
     }
 
@@ -822,7 +844,7 @@
       document.getElementById('feed-interval').value = f.fetch_interval_minutes || 15;
       document.getElementById('feed-include').value = (f.include_keywords || []).join(', ');
       document.getElementById('feed-exclude').value = (f.exclude_keywords || []).join(', ');
-      document.getElementById('feed-color').value = f.custom_color || '';
+      setColorValues('feed-color', 'feed-color-picker', f.custom_color || '', '#5865F2');
       openModal('feed-modal');
     }
 
@@ -835,7 +857,7 @@
       document.getElementById('webhook-url').value = w.url;
       document.getElementById('webhook-username').value = w.username || '';
       document.getElementById('webhook-avatar').value = w.avatar_url || '';
-      document.getElementById('webhook-color').value = w.color || '#5865F2';
+      setColorValues('webhook-color', 'webhook-color-picker', w.color || '#5865F2', '#5865F2');
       openModal('webhook-modal');
     }
 
