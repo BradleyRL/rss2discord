@@ -8,7 +8,7 @@ from src.rss2discord.storage import Storage
 from src.rss2discord.rss_parser import clean_html_to_markdown, extract_image_url
 from src.rss2discord.engine import matches_filters
 from src.rss2discord.discord_client import DiscordWebhookClient, hex_to_int, sanitize_username
-from src.rss2discord.web.server. import create_app
+from src.rss2discord.web.server import create_app
 
 class TestRSS2Discord(unittest.TestCase):
     def setUp(self):
