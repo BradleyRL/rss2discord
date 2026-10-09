@@ -1,0 +1,990 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RSS-to-Discord Router Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #0b0e14;
+      --panel-bg: rgba(22, 27, 38, 0.75);
+      --panel-border: rgba(255, 255, 255, 0.08);
+      --accent-discord: #5865F2;
+      --accent-hover: #4752C4;
+      --accent-cyan: #00f2fe;
+      --accent-purple: #9b51e0;
+      --accent-green: #57F287;
+      --accent-red: #ED4245;
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: var(--bg-dark);
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(88, 101, 242, 0.15) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(0, 242, 254, 0.10) 0px, transparent 50%);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Navbar */
+    header {
+      background: rgba(11, 14, 20, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--panel-border);
+      padding: 1rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: #fff;
+    }
+    .brand-icon {
+      width: 38px;
+      height: 38px;
+      background: linear-gradient(135deg, var(--accent-discord), var(--accent-cyan));
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.3rem;
+      box-shadow: 0 4px 15px rgba(88, 101, 242, 0.4);
+    }
+    .header-actions {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+    }
+
+    /* Main Layout */
+    .container {
+      max-width: 1300px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 2rem;
+      flex: 1;
+    }
+
+    /* Tabs Navigation */
+    .nav-tabs {
+      display: flex;
+      gap: 0.5rem;
+      border-bottom: 1px solid var(--panel-border);
+      margin-bottom: 2rem;
+      overflow-x: auto;
+    }
+    .tab-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 0.75rem 1.25rem;
+      font-size: 0.95rem;
+      font-weight: 500;
+      font-family: inherit;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      white-space: nowrap;
+    }
+    .tab-btn:hover {
+      color: var(--text-main);
+    }
+    .tab-btn.active {
+      color: var(--accent-discord);
+      border-bottom-color: var(--accent-discord);
+    }
+
+    /* Cards & Glassmorphism */
+    .glass-card {
+      background: var(--panel-bg);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--panel-border);
+      border-radius: 14px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.25rem;
+    }
+    .card-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.2rem;
+      font-weight: 600;
+    }
+
+    /* Stats Grid */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1.25rem;
+      margin-bottom: 2rem;
+    }
+    .stat-card {
+      background: var(--panel-bg);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--panel-border);
+      border-radius: 14px;
+      padding: 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    .stat-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.05);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+    }
+    .stat-val {
+      font-size: 1.6rem;
+      font-weight: 700;
+      font-family: 'Outfit', sans-serif;
+    }
+    .stat-lbl {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    /* Buttons & Controls */
+    .btn {
+      background: var(--accent-discord);
+      color: #fff;
+      border: none;
+      padding: 0.6rem 1.2rem;
+      border-radius: 8px;
+      font-weight: 500;
+      font-family: inherit;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: all 0.2s ease;
+      font-size: 0.9rem;
+    }
+    .btn:hover { background: var(--accent-hover); transform: translateY(-1px); }
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-main);
+    }
+    .btn-secondary:hover { background: rgba(255, 255, 255, 0.15); }
+    .btn-danger { background: var(--accent-red); }
+    .btn-danger:hover { background: #d32f2f; }
+    .btn-success { background: var(--accent-green); color: #000; }
+    .btn-success:hover { background: #43b581; }
+
+    /* Tables */
+    .table-container {
+      overflow-x: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 0.9rem;
+    }
+    th, td {
+      padding: 0.9rem 1rem;
+      border-bottom: 1px solid var(--panel-border);
+    }
+    th {
+      color: var(--text-muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      letter-spacing: 0.05em;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255, 255, 255, 0.02); }
+
+    /* Badges */
+    .badge {
+      display: inline-block;
+      padding: 0.25rem 0.6rem;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .badge-success { background: rgba(87, 242, 135, 0.15); color: var(--accent-green); }
+    .badge-error { background: rgba(237, 66, 69, 0.15); color: var(--accent-red); }
+    .badge-info { background: rgba(88, 101, 242, 0.15); color: var(--accent-discord); }
+
+    /* Form Inputs & Modals */
+    .form-group {
+      margin-bottom: 1.1rem;
+    }
+    label {
+      display: block;
+      margin-bottom: 0.4rem;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+    input[type="text"], input[type="url"], input[type="number"], select, textarea {
+      width: 100%;
+      padding: 0.65rem 0.9rem;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid var(--panel-border);
+      border-radius: 8px;
+      color: #fff;
+      font-family: inherit;
+      font-size: 0.9rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--accent-discord);
+    }
+
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.2s ease;
+    }
+    .modal-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .modal {
+      background: var(--bg-dark);
+      border: 1px solid var(--panel-border);
+      border-radius: 16px;
+      width: 90%;
+      max-width: 550px;
+      padding: 2rem;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+    }
+
+    /* Discord Embed Mockup Preview */
+    .discord-embed-preview {
+      background: #2f3136;
+      border-left: 4px solid var(--accent-discord);
+      border-radius: 4px;
+      padding: 1rem;
+      margin-top: 1rem;
+      color: #dcddde;
+      font-family: 'Inter', sans-serif;
+    }
+    .embed-title { font-weight: 700; color: #00aff4; margin-bottom: 0.4rem; text-decoration: none; display: inline-block; }
+    .embed-desc { font-size: 0.85rem; color: #dcddde; margin-bottom: 0.6rem; line-height: 1.4; }
+    .embed-footer { font-size: 0.75rem; color: #72767d; }
+    .embed-img { max-width: 100%; border-radius: 4px; margin-top: 0.5rem; }
+
+    /* Toast Notification */
+    #toast-container {
+      position: fixed;
+      bottom: 2rem;
+      right: 2rem;
+      z-index: 2000;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .toast {
+      background: #1e293b;
+      color: #fff;
+      padding: 0.9rem 1.3rem;
+      border-radius: 8px;
+      border-left: 4px solid var(--accent-discord);
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+      animation: slideIn 0.3s forwards;
+    }
+    @keyframes slideIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <div class="brand">
+      <div class="brand-icon">📡</div>
+      <span>RSS-to-Discord Router</span>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-secondary" onclick="triggerSync()">🔄 Run Sync Now</button>
+      <button class="btn btn-secondary" onclick="exportConfig()">📥 Export Config</button>
+    </div>
+  </header>
+
+  <div class="container">
+
+    <!-- Top Stats -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-icon" style="color: var(--accent-discord);">📡</div>
+        <div>
+          <div class="stat-val" id="stat-feeds">0</div>
+          <div class="stat-lbl">Active Feeds</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon" style="color: var(--accent-cyan);">🔔</div>
+        <div>
+          <div class="stat-val" id="stat-webhooks">0</div>
+          <div class="stat-lbl">Configured Webhooks</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon" style="color: var(--accent-purple);">🔀</div>
+        <div>
+          <div class="stat-val" id="stat-routes">0</div>
+          <div class="stat-lbl">Active Routes</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon" style="color: var(--accent-green);">🚀</div>
+        <div>
+          <div class="stat-val" id="stat-dispatched">0</div>
+          <div class="stat-lbl">Total Dispatches</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="nav-tabs">
+      <button class="tab-btn active" onclick="switchTab('feeds')">📡 Feeds</button>
+      <button class="tab-btn" onclick="switchTab('webhooks')">🔔 Webhooks</button>
+      <button class="tab-btn" onclick="switchTab('routes')">🔀 Routes (M:N)</button>
+      <button class="tab-btn" onclick="switchTab('logs')">📜 Delivery Logs</button>
+      <button class="tab-btn" onclick="switchTab('preview')">🔍 Live Feed Preview</button>
+    </div>
+
+    <!-- TAB 1: FEEDS -->
+    <div id="tab-feeds" class="tab-content">
+      <div class="glass-card">
+        <div class="card-header">
+          <h2 class="card-title">Configured RSS/Atom Feeds</h2>
+          <button class="btn" onclick="openFeedModal()">+ Add New Feed</button>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>URL</th>
+                <th>Interval</th>
+                <th>Filter Rules</th>
+                <th>Last Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="feeds-tbody">
+              <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Loading feeds...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: WEBHOOKS -->
+    <div id="tab-webhooks" class="tab-content" style="display: none;">
+      <div class="glass-card">
+        <div class="card-header">
+          <h2 class="card-title">Discord Webhooks</h2>
+          <button class="btn" onclick="openWebhookModal()">+ Add New Webhook</button>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Webhook URL</th>
+                <th>Override User / Avatar</th>
+                <th>Color</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="webhooks-tbody">
+              <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Loading webhooks...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: ROUTES -->
+    <div id="tab-routes" class="tab-content" style="display: none;">
+      <div class="glass-card">
+        <div class="card-header">
+          <h2 class="card-title">Routing Rules (Multi-Feed -> Multi-Webhook)</h2>
+          <button class="btn" onclick="openRouteModal()">+ Create New Route</button>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Route Name</th>
+                <th>Source Feed</th>
+                <th>Target Webhook</th>
+                <th>Mention / Prefix</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="routes-tbody">
+              <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Loading routes...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 4: LOGS -->
+    <div id="tab-logs" class="tab-content" style="display: none;">
+      <div class="glass-card">
+        <div class="card-header">
+          <h2 class="card-title">Recent Delivery History</h2>
+          <button class="btn btn-secondary" onclick="loadLogs()">🔄 Refresh Logs</button>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Time (UTC)</th>
+                <th>Story Title</th>
+                <th>Feed</th>
+                <th>Webhook</th>
+                <th>Status</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody id="logs-tbody">
+              <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Loading logs...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 5: PREVIEW -->
+    <div id="tab-preview" class="tab-content" style="display: none;">
+      <div class="glass-card">
+        <div class="card-header">
+          <h2 class="card-title">Live RSS Feed Inspector & Discord Embed Preview</h2>
+        </div>
+        <div class="form-group" style="display: flex; gap: 1rem;">
+          <input type="url" id="preview-url" placeholder="https://news.ycombinator.com/rss" style="flex: 1;">
+          <button class="btn" onclick="runFeedPreview()">Inspect & Preview</button>
+        </div>
+        <div id="preview-results" style="margin-top: 1.5rem;"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- MODAL: ADD/EDIT FEED -->
+  <div class="modal-overlay" id="feed-modal">
+    <div class="modal">
+      <h3 style="margin-bottom: 1rem; font-family: 'Outfit';" id="feed-modal-title">Add RSS Feed</h3>
+      <form id="feed-form" onsubmit="saveFeed(event)">
+        <input type="hidden" id="feed-id">
+        <div class="form-group">
+          <label>Feed Name</label>
+          <input type="text" id="feed-name" required placeholder="e.g. Hacker News Top Stories">
+        </div>
+        <div class="form-group">
+          <label>Feed RSS / Atom URL</label>
+          <input type="url" id="feed-url" required placeholder="https://news.ycombinator.com/rss">
+        </div>
+        <div class="form-group">
+          <label>Poll Interval (Minutes)</label>
+          <input type="number" id="feed-interval" value="15" min="1" max="1440">
+        </div>
+        <div class="form-group">
+          <label>Include Keywords (Comma separated, optional)</label>
+          <input type="text" id="feed-include" placeholder="python, ai, release">
+        </div>
+        <div class="form-group">
+          <label>Exclude Keywords (Comma separated, optional)</label>
+          <input type="text" id="feed-exclude" placeholder="crypto, sponsor">
+        </div>
+        <div class="form-group">
+          <label>Embed Accent Color (Hex, optional)</label>
+          <input type="text" id="feed-color" placeholder="#00F2FE">
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem;">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('feed-modal')">Cancel</button>
+          <button type="submit" class="btn">Save Feed</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: ADD/EDIT WEBHOOK -->
+  <div class="modal-overlay" id="webhook-modal">
+    <div class="modal">
+      <h3 style="margin-bottom: 1rem; font-family: 'Outfit';" id="webhook-modal-title">Add Discord Webhook</h3>
+      <form id="webhook-form" onsubmit="saveWebhook(event)">
+        <input type="hidden" id="webhook-id">
+        <div class="form-group">
+          <label>Webhook Name</label>
+          <input type="text" id="webhook-name" required placeholder="e.g. #tech-news-channel">
+        </div>
+        <div class="form-group">
+          <label>Discord Webhook URL</label>
+          <input type="url" id="webhook-url" required placeholder="https://discord.com/api/webhooks/...">
+        </div>
+        <div class="form-group">
+          <label>Override Username (Optional)</label>
+          <input type="text" id="webhook-username" placeholder="Tech News Bot">
+        </div>
+        <div class="form-group">
+          <label>Override Avatar URL (Optional)</label>
+          <input type="url" id="webhook-avatar" placeholder="https://example.com/avatar.png">
+        </div>
+        <div class="form-group">
+          <label>Default Color (Hex)</label>
+          <input type="text" id="webhook-color" value="#5865F2">
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem;">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('webhook-modal')">Cancel</button>
+          <button type="submit" class="btn">Save Webhook</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: ADD/EDIT ROUTE -->
+  <div class="modal-overlay" id="route-modal">
+    <div class="modal">
+      <h3 style="margin-bottom: 1rem; font-family: 'Outfit';" id="route-modal-title">Create Route Mapping</h3>
+      <form id="route-form" onsubmit="saveRoute(event)">
+        <input type="hidden" id="route-id">
+        <div class="form-group">
+          <label>Route Name / Label</label>
+          <input type="text" id="route-name" required placeholder="e.g. HN -> Discord #tech">
+        </div>
+        <div class="form-group">
+          <label>Source Feed</label>
+          <select id="route-feed-id" required></select>
+        </div>
+        <div class="form-group">
+          <label>Target Webhook</label>
+          <select id="route-webhook-id" required></select>
+        </div>
+        <div class="form-group">
+          <label>Mention / Message Prefix (Optional)</label>
+          <input type="text" id="route-prefix" placeholder="@everyone or <@&123456789>">
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem;">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('route-modal')">Cancel</button>
+          <button type="submit" class="btn">Save Route</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container"></div>
+
+  <script>
+    let cache = { feeds: [], webhooks: [], routes: [] };
+
+    document.addEventListener('DOMContentLoaded', () => {
+      loadAll();
+    });
+
+    async function loadAll() {
+      await Promise.all([loadStats(), loadFeeds(), loadWebhooks(), loadRoutes(), loadLogs()]);
+    }
+
+    function showToast(msg, isError = false) {
+      const c = document.getElementById('toast-container');
+      const t = document.createElement('div');
+      t.className = 'toast';
+      if (isError) t.style.borderLeftColor = 'var(--accent-red)';
+      t.innerText = msg;
+      c.appendChild(t);
+      setTimeout(() => t.remove(), 4000);
+    }
+
+    function switchTab(tabName) {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
+      
+      const btn = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.getAttribute('onclick').includes(tabName));
+      if (btn) btn.classList.add('active');
+      
+      const content = document.getElementById(`tab-${tabName}`);
+      if (content) content.style.display = 'block';
+    }
+
+    // --- Stats ---
+    async function loadStats() {
+      try {
+        const r = await fetch('/api/stats');
+        const s = await r.json();
+        document.getElementById('stat-feeds').innerText = s.active_feeds;
+        document.getElementById('stat-webhooks').innerText = s.total_webhooks;
+        document.getElementById('stat-routes').innerText = s.active_routes;
+        document.getElementById('stat-dispatched').innerText = s.total_dispatched;
+      } catch (e) {}
+    }
+
+    // --- Feeds ---
+    async function loadFeeds() {
+      const tbody = document.getElementById('feeds-tbody');
+      try {
+        const r = await fetch('/api/feeds');
+        cache.feeds = await r.json();
+        if (cache.feeds.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No RSS feeds configured. Click "+ Add New Feed" to get started.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = cache.feeds.map(f => `
+          <tr>
+            <td><strong>${escapeHtml(f.name)}</strong></td>
+            <td><a href="${escapeHtml(f.url)}" target="_blank" style="color: var(--accent-cyan); text-decoration: none;">${escapeHtml(f.url)}</a></td>
+            <td>${f.fetch_interval_minutes}m</td>
+            <td>
+              ${f.include_keywords && f.include_keywords.length ? `<span class="badge badge-info">+${f.include_keywords.join(', ')}</span> ` : ''}
+              ${f.exclude_keywords && f.exclude_keywords.length ? `<span class="badge badge-error">-${f.exclude_keywords.join(', ')}</span>` : '-'}
+            </td>
+            <td><span class="badge ${f.last_status === 'ok' ? 'badge-success' : 'badge-error'}">${f.last_status}</span></td>
+            <td>
+              <button class="btn btn-secondary" style="padding: 0.3rem 0.6rem;" onclick="fetchSingleFeed('${f.id}')">🔄 Sync</button>
+              <button class="btn btn-danger" style="padding: 0.3rem 0.6rem;" onclick="deleteFeed('${f.id}')">🗑️</button>
+            </td>
+          </tr>
+        `).join('');
+      } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="6" style="color: var(--accent-red);">Error loading feeds</td></tr>';
+      }
+    }
+
+    // --- Webhooks ---
+    async function loadWebhooks() {
+      const tbody = document.getElementById('webhooks-tbody');
+      try {
+        const r = await fetch('/api/webhooks');
+        cache.webhooks = await r.json();
+        if (cache.webhooks.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No webhooks configured. Click "+ Add New Webhook" to create one.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = cache.webhooks.map(w => `
+          <tr>
+            <td><strong>${escapeHtml(w.name)}</strong></td>
+            <td style="font-family: monospace; font-size: 0.8rem; color: var(--text-muted);">${escapeHtml(w.url.substring(0, 45))}...</td>
+            <td>${w.username ? escapeHtml(w.username) : '<i>Default</i>'}</td>
+            <td><span style="display:inline-block; width:14px; height:14px; background:${w.color}; border-radius:3px; vertical-align:middle;"></span> ${w.color}</td>
+            <td><span class="badge badge-success">Active</span></td>
+            <td>
+              <button class="btn btn-secondary" style="padding: 0.3rem 0.6rem;" onclick="testWebhook('${w.id}')">🧪 Test</button>
+              <button class="btn btn-danger" style="padding: 0.3rem 0.6rem;" onclick="deleteWebhook('${w.id}')">🗑️</button>
+            </td>
+          </tr>
+        `).join('');
+      } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="6" style="color: var(--accent-red);">Error loading webhooks</td></tr>';
+      }
+    }
+
+    // --- Routes ---
+    async function loadRoutes() {
+      const tbody = document.getElementById('routes-tbody');
+      try {
+        const r = await fetch('/api/routes');
+        cache.routes = await r.json();
+        if (cache.routes.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No routes configured. Map a Feed to a Webhook to enable delivery.</td></tr>';
+          return;
+        }
+
+        const feedMap = Object.fromEntries(cache.feeds.map(f => [f.id, f.name]));
+        const webhookMap = Object.fromEntries(cache.webhooks.map(w => [w.id, w.name]));
+
+        tbody.innerHTML = cache.routes.map(rt => `
+          <tr>
+            <td><strong>${escapeHtml(rt.name)}</strong></td>
+            <td><span class="badge badge-info">📡 ${escapeHtml(feedMap[rt.feed_id] || rt.feed_id)}</span></td>
+            <td><span class="badge badge-info">🔔 ${escapeHtml(webhookMap[rt.webhook_id] || rt.webhook_id)}</span></td>
+            <td>${rt.message_prefix ? `<code>${escapeHtml(rt.message_prefix)}</code>` : '-'}</td>
+            <td><span class="badge badge-success">Enabled</span></td>
+            <td>
+              <button class="btn btn-danger" style="padding: 0.3rem 0.6rem;" onclick="deleteRoute('${rt.id}')">🗑️</button>
+            </td>
+          </tr>
+        `).join('');
+      } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="6" style="color: var(--accent-red);">Error loading routes</td></tr>';
+      }
+    }
+
+    // --- Logs ---
+    async function loadLogs() {
+      const tbody = document.getElementById('logs-tbody');
+      try {
+        const r = await fetch('/api/logs?limit=30');
+        const logs = await r.json();
+        if (logs.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No delivery logs recorded yet.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = logs.map(l => `
+          <tr>
+            <td style="font-size: 0.8rem; color: var(--text-muted);">${new Date(l.delivered_at).toLocaleString()}</td>
+            <td><strong><a href="${escapeHtml(l.item_link)}" target="_blank" style="color: #fff; text-decoration: none;">${escapeHtml(l.item_title)}</a></strong></td>
+            <td>${escapeHtml(l.feed_name)}</td>
+            <td>${escapeHtml(l.webhook_name)}</td>
+            <td><span class="badge ${l.status === 'success' ? 'badge-success' : 'badge-error'}">${l.status}</span></td>
+            <td style="font-size: 0.8rem; color: var(--accent-red);">${l.error_message ? escapeHtml(l.error_message) : '-'}</td>
+          </tr>
+        `).join('');
+      } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="6" style="color: var(--accent-red);">Error loading logs</td></tr>';
+      }
+    }
+
+    // Modal Helpers
+    function openModal(id) { document.getElementById(id).classList.add('active'); }
+    function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+    function openFeedModal() {
+      document.getElementById('feed-form').reset();
+      document.getElementById('feed-id').value = '';
+      openModal('feed-modal');
+    }
+
+    function openWebhookModal() {
+      document.getElementById('webhook-form').reset();
+      document.getElementById('webhook-id').value = '';
+      openModal('webhook-modal');
+    }
+
+    function openRouteModal() {
+      document.getElementById('route-form').reset();
+      document.getElementById('route-id').value = '';
+      
+      const feedSelect = document.getElementById('route-feed-id');
+      const webhookSelect = document.getElementById('route-webhook-id');
+      
+      feedSelect.innerHTML = cache.feeds.map(f => `<option value="${f.id}">${escapeHtml(f.name)}</option>`).join('');
+      webhookSelect.innerHTML = cache.webhooks.map(w => `<option value="${w.id}">${escapeHtml(w.name)}</option>`).join('');
+      
+      openModal('route-modal');
+    }
+
+    // Save Handlers
+    async function saveFeed(e) {
+      e.preventDefault();
+      const data = {
+        id: document.getElementById('feed-id').value || undefined,
+        name: document.getElementById('feed-name').value,
+        url: document.getElementById('feed-url').value,
+        fetch_interval_minutes: parseInt(document.getElementById('feed-interval').value),
+        include_keywords: document.getElementById('feed-include').value,
+        exclude_keywords: document.getElementById('feed-exclude').value,
+        custom_color: document.getElementById('feed-color').value || null
+      };
+
+      const r = await fetch('/api/feeds', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+      });
+      if (r.ok) {
+        closeModal('feed-modal');
+        showToast('Feed saved successfully');
+        loadAll();
+      } else {
+        showToast('Failed to save feed', true);
+      }
+    }
+
+    async function saveWebhook(e) {
+      e.preventDefault();
+      const data = {
+        id: document.getElementById('webhook-id').value || undefined,
+        name: document.getElementById('webhook-name').value,
+        url: document.getElementById('webhook-url').value,
+        username: document.getElementById('webhook-username').value || null,
+        avatar_url: document.getElementById('webhook-avatar').value || null,
+        color: document.getElementById('webhook-color').value || '#5865F2'
+      };
+
+      const r = await fetch('/api/webhooks', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+      });
+      if (r.ok) {
+        closeModal('webhook-modal');
+        showToast('Webhook saved successfully');
+        loadAll();
+      } else {
+        showToast('Failed to save webhook', true);
+      }
+    }
+
+    async function saveRoute(e) {
+      e.preventDefault();
+      const feedSelect = document.getElementById('route-feed-id');
+      const webhookSelect = document.getElementById('route-webhook-id');
+
+      const data = {
+        id: document.getElementById('route-id').value || undefined,
+        name: document.getElementById('route-name').value,
+        feed_id: feedSelect.value,
+        webhook_id: webhookSelect.value,
+        message_prefix: document.getElementById('route-prefix').value || null
+      };
+
+      const r = await fetch('/api/routes', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+      });
+      if (r.ok) {
+        closeModal('route-modal');
+        showToast('Route created successfully');
+        loadAll();
+      } else {
+        showToast('Failed to create route', true);
+      }
+    }
+
+    // Delete Handlers
+    async function deleteFeed(id) {
+      if (!confirm('Are you sure you want to delete this feed?')) return;
+      const r = await fetch(`/api/feeds/${id}`, { method: 'DELETE' });
+      if (r.ok) { showToast('Feed deleted'); loadAll(); }
+    }
+
+    async function deleteWebhook(id) {
+      if (!confirm('Are you sure you want to delete this webhook?')) return;
+      const r = await fetch(`/api/webhooks/${id}`, { method: 'DELETE' });
+      if (r.ok) { showToast('Webhook deleted'); loadAll(); }
+    }
+
+    async function deleteRoute(id) {
+      if (!confirm('Are you sure you want to delete this route?')) return;
+      const r = await fetch(`/api/routes/${id}`, { method: 'DELETE' });
+      if (r.ok) { showToast('Route deleted'); loadAll(); }
+    }
+
+    // Action Triggers
+    async function testWebhook(id) {
+      showToast('Sending test message...');
+      const r = await fetch(`/api/webhooks/${id}/test`, { method: 'POST' });
+      if (r.ok) {
+        showToast('Test message delivered to Discord!');
+      } else {
+        const err = await r.json();
+        showToast(`Test failed: ${err.detail}`, true);
+      }
+    }
+
+    async function fetchSingleFeed(id) {
+      showToast('Fetching feed...');
+      const r = await fetch(`/api/feeds/${id}/fetch`, { method: 'POST' });
+      if (r.ok) {
+        const res = await r.json();
+        showToast(`Sync complete! Dispatched: ${res.items_dispatched}, Skipped: ${res.items_skipped_duplicate}`);
+        loadAll();
+      } else {
+        showToast('Feed fetch failed', true);
+      }
+    }
+
+    async function triggerSync() {
+      showToast('Running full feed sync cycle...');
+      const r = await fetch('/api/sync', { method: 'POST' });
+      if (r.ok) {
+        const res = await r.json();
+        showToast(`Sync complete! Processed ${res.feeds_processed} feeds, Dispatched ${res.items_dispatched} items.`);
+        loadAll();
+      } else {
+        showToast('Sync cycle failed', true);
+      }
+    }
+
+    function exportConfig() {
+      window.location.href = '/api/config/export';
+    }
+
+    async function runFeedPreview() {
+      const url = document.getElementById('preview-url').value;
+      const resContainer = document.getElementById('preview-results');
+      if (!url) return showToast('Please enter an RSS URL', true);
+
+      resContainer.innerHTML = '<p style="color: var(--text-muted);">Fetching and parsing RSS feed...</p>';
+      
+      try {
+        const r = await fetch('/api/feeds/preview', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ url })
+        });
+        if (!r.ok) {
+          const err = await r.json();
+          resContainer.innerHTML = `<p style="color: var(--accent-red);">${escapeHtml(err.detail)}</p>`;
+          return;
+        }
+
+        const data = await r.json();
+        resContainer.innerHTML = `
+          <p style="margin-bottom: 1rem; color: var(--accent-green);">Successfully parsed feed! Found ${data.count} items. Showing first ${data.items.length}:</p>
+          ${data.items.map(item => `
+            <div style="margin-bottom: 1.5rem;">
+              <h4 style="margin-bottom: 0.3rem;">Story: ${escapeHtml(item.title)}</h4>
+              <div class="discord-embed-preview">
+                <a href="${escapeHtml(item.link)}" target="_blank" class="embed-title">${escapeHtml(item.title)}</a>
+                <div class="embed-desc">${escapeHtml(item.description || 'No description available.')}</div>
+                ${item.image_url ? `<img src="${escapeHtml(item.image_url)}" class="embed-img" alt="Thumbnail">` : ''}
+                <div class="embed-footer">Source: RSS Feed ${item.published ? '• ' + escapeHtml(item.published) : ''}</div>
+              </div>
+            </div>
+          `).join('')}
+        `;
+      } catch (e) {
+        resContainer.innerHTML = `<p style="color: var(--accent-red);">Failed to connect to feed server</p>`;
+      }
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+  </script>
+</body>
+</html>

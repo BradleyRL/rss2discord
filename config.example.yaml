@@ -1,0 +1,70 @@
+# RSS to Discord Router Example Configuration
+# Load into app using: python3 -m rss2discord import-config config.example.yaml
+
+webhooks:
+  - id: wh-tech
+    name: "Tech News Channel"
+    url: "https://discord.com/api/webhooks/1234567890/EXAMPLE_WEBHOOK_TOKEN_1"
+    color: "#5865F2"
+    username: "Tech Feed Bot"
+    avatar_url: "https://cdn.discordapp.com/embed/avatars/0.png"
+    enabled: true
+
+  - id: wh-gaming
+    name: "Gaming & Entertainment Channel"
+    url: "https://discord.com/api/webhooks/1234567890/EXAMPLE_WEBHOOK_TOKEN_2"
+    color: "#ED4245"
+    username: "Gaming News"
+    enabled: true
+
+  - id: wh-announcements
+    name: "Important Updates Channel"
+    url: "https://discord.com/api/webhooks/1234567890/EXAMPLE_WEBHOOK_TOKEN_3"
+    color: "#00F2FE"
+    enabled: true
+
+feeds:
+  - id: feed-hn
+    name: "Hacker News Top Stories"
+    url: "https://news.ycombinator.com/rss"
+    fetch_interval_minutes: 15
+    enabled: true
+    include_keywords: []
+    exclude_keywords: ["crypto", "nft"]
+    custom_color: "#FF6600"
+
+  - id: feed-bbc
+    name: "BBC News World"
+    url: "http://feeds.bbci.co.uk/news/world/rss.xml"
+    fetch_interval_minutes: 30
+    enabled: true
+
+  - id: feed-github
+    name: "GitHub Blog & Releases"
+    url: "https://github.blog/feed/"
+    fetch_interval_minutes: 60
+    enabled: true
+    include_keywords: ["release", "ai", "security"]
+
+routes:
+  # Route 1: Hacker News -> Tech News Channel
+  - id: r-hn-tech
+    name: "HN Top Stories -> #tech-news"
+    feed_id: "feed-hn"
+    webhook_id: "wh-tech"
+    enabled: true
+
+  # Route 2: GitHub Blog -> Tech News Channel
+  - id: r-gh-tech
+    name: "GitHub Blog -> #tech-news"
+    feed_id: "feed-github"
+    webhook_id: "wh-tech"
+    enabled: true
+
+  # Route 3: BBC News -> Important Updates Channel (with @everyone tag)
+  - id: r-bbc-updates
+    name: "BBC World -> #announcements"
+    feed_id: "feed-bbc"
+    webhook_id: "wh-announcements"
+    message_prefix: "@everyone"
+    enabled: true
