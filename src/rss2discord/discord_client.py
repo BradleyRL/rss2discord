@@ -15,14 +15,14 @@ def hex_to_int(hex_str: str) -> int:
         return 0x5865F2  # Discord Blurple default
 
 def sanitize_username(name: Optional[str]) -> Optional[str]:
-    if not name:
+    if not name or not name.strip():
         return None
     # Discord API restricts usernames containing "discord", "clyde", "@", ":", or "```"
     sanitized = re.sub(r'discord', 'FeedHub', name, flags=re.IGNORECASE)
     sanitized = re.sub(r'clyde', 'Bot', sanitized, flags=re.IGNORECASE)
     sanitized = re.sub(r'[@:`]', '', sanitized)
     sanitized = sanitized.strip()[:80]
-    return sanitized or "RSS Feed Router"
+    return sanitized if sanitized else None
 
 class DiscordWebhookClient:
     def __init__(self, timeout: float = 10.0):
@@ -72,8 +72,10 @@ class DiscordWebhookClient:
             "embeds": [embed]
         }
 
-        raw_username = webhook.username or f"RSS: {feed.name}"
-        payload["username"] = sanitize_username(raw_username)
+        if webhook.username:
+            sanitized_name = sanitize_username(webhook.username)
+            if sanitized_name:
+                payload["username"] = sanitized_name
 
         if webhook.avatar_url:
             payload["avatar_url"] = webhook.avatar_url
@@ -83,20 +85,23 @@ class DiscordWebhookClient:
 
         return self.post_payload(webhook.url, payload)
 
-    def send_test_message(self, webhook_url: str, name: str = "Test Webhook") -> Tuple[bool, Optional[str]]:
-        payload = {
-            "username": "RSS Feed Router",
+    def send_test_message(self, webhook_url: str, name: str = "Test Webhook", username: Optional[str] = None) -> Tuple[bool, Optional[str]]:
+        payload: Dict[str, Any] = {
             "embeds": [
                 {
                     "title": "Webhook Connection Test Successful!",
                     "description": f"The Discord webhook for **{name}** is configured correctly and ready to receive RSS feed updates.",
                     "color": 0x57F287,  # Green
                     "footer": {
-                        "text": "RSS Feed Router • Test System"
+                        "text": "RSS-to-Discord Router • Test System"
                     }
                 }
             ]
         }
+        if username:
+            sanitized_name = sanitize_username(username)
+            if sanitized_name:
+                payload["username"] = sanitized_name
         return self.post_payload(webhook_url, payload)
 
     def post_payload(self, webhook_url: str, payload: Dict[str, Any], max_retries: int = 3) -> Tuple[bool, Optional[str]]:

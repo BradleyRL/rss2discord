@@ -76,34 +76,47 @@ class RSSEngine:
                 stats["errors"].append({"feed_name": feed.name, "error": fetch_error})
                 continue
 
-            is_first_fetch = (feed.last_fetched_at is None or feed.last_status == "never_fetched")
+            is_first_fetch = (
+                feed.last_fetched_at is None or
+                feed.last_status in ("never_fetched", "ok_no_routes", "no_routes") or
+                not self.storage.has_sent_items_for_feed(feed.id)
+            )
             self.storage.update_feed_fetch_status(feed.id, "ok")
             stats["items_found"] += len(items)
 
-            # If this is the first time fetching a newly added feed, restrict initial dispatch
+            # Filter items matching feed keyword rules
+            matching_items = [item for item in items if matches_filters(item, feed)]
+            stats["items_skipped_filter"] += (len(items) - len(matching_items))
+
+            # Restrict initial dispatch on first run for newly added feed
             if is_first_fetch and items:
                 init_mode = getattr(feed, "initial_fetch_mode", "latest_only") or "latest_only"
                 if init_mode == "latest_only":
-                    # Keep only the newest item (items[0]) and mute all older historical items (items[1:])
-                    muted_count = len(items) - 1
-                    for older_item in items[1:]:
-                        for route in feed_routes:
-                            self.storage.mark_item_sent(older_item.item_hash, feed.id, route.webhook_id)
-                    items = [items[0]]
-                    logger.info(f"First run for newly added feed '{feed.name}': Dispatched 1 latest story, muted {muted_count} older historical stories.")
+                    if matching_items:
+                        target_item = matching_items[0]
+                        items_to_process = [target_item]
+                        for other_item in items:
+                            if other_item.item_hash != target_item.item_hash:
+                                for route in feed_routes:
+                                    self.storage.mark_item_sent(other_item.item_hash, feed.id, route.webhook_id)
+                        logger.info(f"First run for feed '{feed.name}': Sending 1 latest story ('{target_item.title}'), muting {len(items)-1} historical stories.")
+                    else:
+                        items_to_process = []
+                        for other_item in items:
+                            for route in feed_routes:
+                                self.storage.mark_item_sent(other_item.item_hash, feed.id, route.webhook_id)
                 elif init_mode == "mute_all":
+                    items_to_process = []
                     for muted_item in items:
                         for route in feed_routes:
                             self.storage.mark_item_sent(muted_item.item_hash, feed.id, route.webhook_id)
-                    items = []
-                    logger.info(f"First run for newly added feed '{feed.name}': Muted all {len(items)} historical stories.")
+                    logger.info(f"First run for feed '{feed.name}': Muted all {len(items)} historical stories.")
+                else:
+                    items_to_process = matching_items
+            else:
+                items_to_process = matching_items
 
-            for item in items:
-                # Check keyword filter rules
-                if not matches_filters(item, feed):
-                    stats["items_skipped_filter"] += 1
-                    continue
-
+            for item in items_to_process:
                 item_hash = item.item_hash
 
                 for route in feed_routes:
