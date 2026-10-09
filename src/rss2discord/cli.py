@@ -5,6 +5,9 @@ import time
 import logging
 import uvicorn
 from typing import Optional
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from .storage import Storage, DEFAULT_DB_PATH
 from .engine import RSSEngine

@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rss2discord"
+version = "1.0.0"
+description = "RSS to Multi-Discord Webhook Router"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+dependencies = [
+    "feedparser>=6.0.10",
+    "httpx>=0.25.0",
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.22.0",
+    "PyYAML>=6.0",
+    "python-multipart>=0.0.6",
+    "python-dotenv>=1.0.0"
+]
+
+[project.scripts]
+rss2discord = "rss2discord.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

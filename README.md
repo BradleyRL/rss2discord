@@ -9,158 +9,103 @@ An RSS/Atom feed reader and dispatcher that routes updates from **multiple RSS f
 ## ✨ Features
 
 - **Multi-Feed to Multi-Webhook (M:N Routing)**: Map any number of RSS/Atom/JSON feeds to any number of Discord channels/webhooks with custom message prefixes (e.g., `@everyone` or `<@&role_id>`).
+- **Virtual Env & `.env` Support**: Runs cleanly inside Python virtual environments (`.venv`), Docker containers, or systemd services with `.env` configuration file loading.
 - **Web UI Dashboard with Basic Auth**: Protect public access to your web dashboard with HTTP Basic Authentication (`--auth user:pass` or `ADMIN_USER`/`ADMIN_PASS` env vars).
 - **Customizable Port & Host**: Easily change the server port (`--port` or `PORT=8080` env var).
 - **Duplicate Prevention**: SQLite persistent storage ensures feed stories are dispatched exactly once, even across system restarts.
 - **Rich Discord Embed Formatting**: Converts HTML descriptions to clean Markdown, extracts lead images/thumbnails (`<media:content>`, `<enclosure>`, `og:image`, `<img>`), formats publish dates, and sets custom embed accent colors per feed or webhook.
 - **Keyword Filtering**: Filter stories using `include_keywords` (must contain) and `exclude_keywords` (must not contain).
-- **Dual Operating Modes**:
-  - **CLI / Daemon**: Run as a daemon (`daemon`), one-shot sync for cron (`sync`), or test webhooks (`test-webhook`).
-  - **Web Dashboard**: Modern glassmorphism single-page app (`serve`) for visual management, live feed previews, and real-time delivery logs.
-- **YAML Config Import/Export**: Manage state in SQLite or export/import seamlessly to `config.yaml`.
-- **Rate Limit Safe**: Automatically handles Discord HTTP 429 rate limit backoff.
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Running inside Environments
 
-### 1. Installation
+### 🐍 Option 1: Python Virtual Environment (`.venv`) & `.env` file
 
-Ensure Python 3.9+ is installed. Clone the repository and install required packages:
+1. **Create and activate a virtual environment:**
 
-```bash
-git clone https://github.com/BradleyRL/rss2discord.git
-cd rss2discord
+   ```bash
+   python3 -m venv .venv
+   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+   ```
 
-pip install feedparser httpx fastapi uvicorn PyYAML python-multipart
-```
+2. **Install dependencies:**
 
-### 2. Launch the Web UI Dashboard
+   ```bash
+   pip install -r requirements.txt
+   pip install -e .
+   ```
 
-Run the server command to open the visual dashboard (default port `8000`):
+3. **Configure your `.env` file:**
 
-```bash
-python3 -m rss2discord serve --port 8000
-```
+   Copy `.env.example` to `.env`:
 
-#### 🔒 Basic Auth & Internet Deployment
+   ```bash
+   cp .env.example .env
+   ```
 
-To secure the dashboard when accessing it from the internet:
+   Edit `.env`:
 
-```bash
-# Option A: Command line flags
-python3 -m rss2discord serve --port 8080 --auth admin:MySecretPassword123
+   ```env
+   PORT=8000
+   HOST=0.0.0.0
+   ADMIN_USER=admin
+   ADMIN_PASS=MySecretPassword123!
+   ```
 
-# Option B: Environment variables (great for Docker / systemd)
-export PORT=8080
-export ADMIN_USER=admin
-export ADMIN_PASS=MySecretPassword123
-python3 -m rss2discord serve
-```
+4. **Run the Dashboard or Daemon:**
 
-Open `http://localhost:8080` in your browser. You will be prompted to enter your Basic Auth credentials!
+   ```bash
+   # Run Web Dashboard (automatically loads .env):
+   rss2discord serve
+
+   # Or run continuous background daemon:
+   rss2discord daemon --interval 300
+   ```
+
+---
+
+### 🐳 Option 2: Docker & Docker Compose Container Environment
+
+Run the application inside an isolated Docker environment:
+
+1. **Copy `.env.example` to `.env`:**
+
+   ```bash
+   cp .env.example .env
+   ```
+
+2. **Start with Docker Compose:**
+
+   ```bash
+   docker-compose up -d
+   ```
+
+   The app will run inside a container on port `8000` with volume persistence in `./data/`.
 
 ---
 
 ## 🛠️ CLI Usage & Commands
 
-### 📥 Import / Export Configuration
-
 ```bash
-# Import feeds, webhooks, and routes from a YAML file:
-python3 -m rss2discord import-config config.example.yaml
+# Import feeds & webhooks from YAML config:
+rss2discord import-config config.example.yaml
 
-# Export current database setup to YAML:
-python3 -m rss2discord export-config -o my_config.yaml
-```
+# List current setup:
+rss2discord list
 
-### 📋 List Setup
+# Test a webhook:
+rss2discord test-webhook "https://discord.com/api/webhooks/YOUR_URL"
 
-```bash
-python3 -m rss2discord list
-```
-
-### 🧪 Test Webhook Connection
-
-```bash
-python3 -m rss2discord test-webhook "https://discord.com/api/webhooks/YOUR_WEBHOOK_URL" --name "Tech Channel"
-```
-
-### 🔄 Run One-Shot Sync (Ideal for Cron)
-
-```bash
-python3 -m rss2discord sync
-```
-
-### 🤖 Run Continuous Background Daemon
-
-```bash
-python3 -m rss2discord daemon --interval 300
-```
-
----
-
-## ⚙️ Configuration File (`config.yaml`)
-
-```yaml
-webhooks:
-  - id: wh-tech
-    name: "Tech News Channel"
-    url: "https://discord.com/api/webhooks/1234567890/EXAMPLE_WEBHOOK_TOKEN"
-    color: "#5865F2"
-    username: "Tech Feed Bot"
-    enabled: true
-
-feeds:
-  - id: feed-hn
-    name: "Hacker News Top Stories"
-    url: "https://news.ycombinator.com/rss"
-    fetch_interval_minutes: 15
-    enabled: true
-    include_keywords: ["python", "ai"]
-    exclude_keywords: ["crypto"]
-    custom_color: "#FF6600"
-
-routes:
-  - id: r-hn-tech
-    name: "HN -> #tech-news"
-    feed_id: "feed-hn"
-    webhook_id: "wh-tech"
-    message_prefix: ""
-    enabled: true
-```
-
----
-
-## 📜 Systemd Daemon Service Example with Basic Auth
-
-Create `/etc/systemd/system/rss2discord.service`:
-
-```ini
-[Unit]
-Description=RSS to Discord Router Web & Daemon Service
-After=network.target
-
-[Service]
-Type=simple
-User=ubuntu
-WorkingDirectory=/home/ubuntu/rss2discord
-Environment=PORT=8080
-Environment=ADMIN_USER=admin
-Environment=ADMIN_PASS=ChangeMeSecretPassword
-ExecStart=/usr/bin/python3 -m rss2discord serve
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
+# Single sync cycle (for cron):
+rss2discord sync
 ```
 
 ---
 
 ## 🧪 Running Tests
 
-Run the included unit test suite:
+Run the unit test suite inside your environment:
 
 ```bash
 PYTHONPATH=src python3 -m unittest discover -s tests
