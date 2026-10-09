@@ -78,7 +78,7 @@ Run the application inside an isolated Docker environment:
 2. **Start with Docker Compose:**
 
    ```bash
-   docker-compose up -d
+   docker compose up -d
    ```
 
    The app will run inside a container on port `8000` with volume persistence in `./data/`.
