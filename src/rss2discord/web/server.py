@@ -184,6 +184,10 @@ def create_app(
         storage.import_yaml(content.decode("utf-8"))
         return {"status": "imported"}
 
+    @app.get("/favicon.ico", include_in_schema=False)
+    def favicon():
+        return Response(status_code=204)
+
     # Serve static assets (protected by auth)
     @app.get("/", dependencies=auth_dep)
     def read_index():
