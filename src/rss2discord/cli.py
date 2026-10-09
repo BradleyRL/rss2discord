@@ -38,12 +38,15 @@ def main():
     # serve
     default_host = os.getenv("HOST", "0.0.0.0")
     default_port = int(os.getenv("PORT", "8000"))
+    default_interval = int(os.getenv("POLL_INTERVAL", "300"))
     p_serve = subparsers.add_parser("serve", help="Launch the Web UI Dashboard & REST API server")
     p_serve.add_argument("--host", default=default_host, help=f"Host address (default: {default_host})")
     p_serve.add_argument("--port", type=int, default=default_port, help=f"Port number (default: {default_port})")
     p_serve.add_argument("--auth", help="Enable Basic Auth formatted as 'username:password'")
     p_serve.add_argument("--auth-user", default=os.getenv("ADMIN_USER"), help="Basic Auth username (or ADMIN_USER env var)")
     p_serve.add_argument("--auth-pass", default=os.getenv("ADMIN_PASS"), help="Basic Auth password (or ADMIN_PASS env var)")
+    p_serve.add_argument("--poll-interval", type=int, default=default_interval, help=f"Background poll check interval in seconds (default: {default_interval})")
+    p_serve.add_argument("--no-poll", action="store_true", help="Disable automatic background RSS polling in web server")
 
     # test-webhook
     p_test = subparsers.add_parser("test-webhook", help="Send a test message to a Discord Webhook URL")
@@ -98,13 +101,25 @@ def main():
         if args.auth and ":" in args.auth:
             auth_user, auth_pass = args.auth.split(":", 1)
 
-        app = create_app(args.db, auth_user=auth_user, auth_pass=auth_pass)
+        enable_poll = not args.no_poll
+        app = create_app(
+            args.db,
+            auth_user=auth_user,
+            auth_pass=auth_pass,
+            enable_background_poll=enable_poll,
+            poll_interval_seconds=args.poll_interval
+        )
         
         effective_user = auth_user or os.getenv("ADMIN_USER") or os.getenv("RSS2DISCORD_AUTH_USER")
         if effective_user:
             logger.info(f"Basic Auth enabled for dashboard (User: '{effective_user}')")
         else:
             logger.warning("Basic Auth disabled. Dashboard is accessible without authentication.")
+
+        if enable_poll:
+            logger.info(f"Built-in background RSS polling enabled (interval: {args.poll_interval}s)")
+        else:
+            logger.info("Built-in background RSS polling disabled (--no-poll)")
 
         logger.info(f"Starting RSS-to-Discord Router Web Dashboard on http://{args.host}:{args.port}")
         uvicorn.run(app, host=args.host, port=args.port)

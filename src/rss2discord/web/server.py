@@ -6,7 +6,10 @@ from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import os
 import secrets
+import asyncio
+import logging
 import uvicorn
+from contextlib import asynccontextmanager
 
 from ..storage import Storage, DEFAULT_DB_PATH
 from ..models import WebhookConfig, FeedConfig, RouteConfig
@@ -14,17 +17,50 @@ from ..engine import RSSEngine
 from ..discord_client import DiscordWebhookClient
 from ..rss_parser import RSSFetcher
 
+logger = logging.getLogger("rss2discord.server")
 security = HTTPBasic(auto_error=False)
 
 def create_app(
     db_path: str = DEFAULT_DB_PATH,
     auth_user: Optional[str] = None,
-    auth_pass: Optional[str] = None
+    auth_pass: Optional[str] = None,
+    enable_background_poll: bool = True,
+    poll_interval_seconds: int = 300
 ) -> FastAPI:
-    app = FastAPI(title="RSS to Discord Router", version="1.0.0")
+
     storage = Storage(db_path)
     engine = RSSEngine(storage)
     discord_client = DiscordWebhookClient()
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        poll_task = None
+        if enable_background_poll:
+            async def poll_worker():
+                logger.info(f"Background RSS polling worker started (checking every {poll_interval_seconds}s)")
+                while True:
+                    await asyncio.sleep(poll_interval_seconds)
+                    try:
+                        logger.info("Background worker executing RSS sync cycle...")
+                        res = await asyncio.to_thread(engine.run_sync)
+                        logger.info(f"Background worker sync complete: {res.get('items_dispatched', 0)} items dispatched.")
+                    except asyncio.CancelledError:
+                        break
+                    except Exception as e:
+                        logger.error(f"Error in background polling worker: {e}")
+
+            poll_task = asyncio.create_task(poll_worker())
+
+        yield
+
+        if poll_task:
+            poll_task.cancel()
+            try:
+                await poll_task
+            except asyncio.CancelledError:
+                pass
+
+    app = FastAPI(title="RSS to Discord Router", version="1.0.0", lifespan=lifespan)
 
     # Determine authentication credentials from arguments or environment variables
     env_user = auth_user or os.getenv("ADMIN_USER") or os.getenv("RSS2DISCORD_AUTH_USER")
