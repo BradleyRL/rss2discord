@@ -682,6 +682,7 @@
             </td>
             <td><span class="badge ${f.last_status === 'ok' ? 'badge-success' : 'badge-error'}">${f.last_status}</span></td>
             <td>
+              <button class="btn btn-secondary" style="padding: 0.3rem 0.6rem;" onclick="editFeed('${f.id}')">✏️ Edit</button>
               <button class="btn btn-secondary" style="padding: 0.3rem 0.6rem;" onclick="fetchSingleFeed('${f.id}')">🔄 Sync</button>
               <button class="btn btn-danger" style="padding: 0.3rem 0.6rem;" onclick="deleteFeed('${f.id}')">🗑️</button>
             </td>
@@ -710,6 +711,7 @@
             <td><span style="display:inline-block; width:14px; height:14px; background:${w.color}; border-radius:3px; vertical-align:middle;"></span> ${w.color}</td>
             <td><span class="badge badge-success">Active</span></td>
             <td>
+              <button class="btn btn-secondary" style="padding: 0.3rem 0.6rem;" onclick="editWebhook('${w.id}')">✏️ Edit</button>
               <button class="btn btn-secondary" style="padding: 0.3rem 0.6rem;" onclick="testWebhook('${w.id}')">🧪 Test</button>
               <button class="btn btn-danger" style="padding: 0.3rem 0.6rem;" onclick="deleteWebhook('${w.id}')">🗑️</button>
             </td>
@@ -742,6 +744,7 @@
             <td>${rt.message_prefix ? `<code>${escapeHtml(rt.message_prefix)}</code>` : '-'}</td>
             <td><span class="badge badge-success">Enabled</span></td>
             <td>
+              <button class="btn btn-secondary" style="padding: 0.3rem 0.6rem;" onclick="editRoute('${rt.id}')">✏️ Edit</button>
               <button class="btn btn-danger" style="padding: 0.3rem 0.6rem;" onclick="deleteRoute('${rt.id}')">🗑️</button>
             </td>
           </tr>
@@ -783,18 +786,21 @@
     function openFeedModal() {
       document.getElementById('feed-form').reset();
       document.getElementById('feed-id').value = '';
+      document.getElementById('feed-modal-title').innerText = 'Add RSS Feed';
       openModal('feed-modal');
     }
 
     function openWebhookModal() {
       document.getElementById('webhook-form').reset();
       document.getElementById('webhook-id').value = '';
+      document.getElementById('webhook-modal-title').innerText = 'Add Discord Webhook';
       openModal('webhook-modal');
     }
 
     function openRouteModal() {
       document.getElementById('route-form').reset();
       document.getElementById('route-id').value = '';
+      document.getElementById('route-modal-title').innerText = 'Create Route Mapping';
       
       const feedSelect = document.getElementById('route-feed-id');
       const webhookSelect = document.getElementById('route-webhook-id');
@@ -802,6 +808,52 @@
       feedSelect.innerHTML = cache.feeds.map(f => `<option value="${f.id}">${escapeHtml(f.name)}</option>`).join('');
       webhookSelect.innerHTML = cache.webhooks.map(w => `<option value="${w.id}">${escapeHtml(w.name)}</option>`).join('');
       
+      openModal('route-modal');
+    }
+
+    // Edit Handlers
+    function editFeed(id) {
+      const f = cache.feeds.find(item => item.id === id);
+      if (!f) return;
+      document.getElementById('feed-modal-title').innerText = 'Edit RSS Feed';
+      document.getElementById('feed-id').value = f.id;
+      document.getElementById('feed-name').value = f.name;
+      document.getElementById('feed-url').value = f.url;
+      document.getElementById('feed-interval').value = f.fetch_interval_minutes || 15;
+      document.getElementById('feed-include').value = (f.include_keywords || []).join(', ');
+      document.getElementById('feed-exclude').value = (f.exclude_keywords || []).join(', ');
+      document.getElementById('feed-color').value = f.custom_color || '';
+      openModal('feed-modal');
+    }
+
+    function editWebhook(id) {
+      const w = cache.webhooks.find(item => item.id === id);
+      if (!w) return;
+      document.getElementById('webhook-modal-title').innerText = 'Edit Discord Webhook';
+      document.getElementById('webhook-id').value = w.id;
+      document.getElementById('webhook-name').value = w.name;
+      document.getElementById('webhook-url').value = w.url;
+      document.getElementById('webhook-username').value = w.username || '';
+      document.getElementById('webhook-avatar').value = w.avatar_url || '';
+      document.getElementById('webhook-color').value = w.color || '#5865F2';
+      openModal('webhook-modal');
+    }
+
+    function editRoute(id) {
+      const rt = cache.routes.find(item => item.id === id);
+      if (!rt) return;
+      document.getElementById('route-modal-title').innerText = 'Edit Route Mapping';
+      document.getElementById('route-id').value = rt.id;
+      document.getElementById('route-name').value = rt.name;
+
+      const feedSelect = document.getElementById('route-feed-id');
+      const webhookSelect = document.getElementById('route-webhook-id');
+      feedSelect.innerHTML = cache.feeds.map(f => `<option value="${f.id}">${escapeHtml(f.name)}</option>`).join('');
+      webhookSelect.innerHTML = cache.webhooks.map(w => `<option value="${w.id}">${escapeHtml(w.name)}</option>`).join('');
+
+      feedSelect.value = rt.feed_id;
+      webhookSelect.value = rt.webhook_id;
+      document.getElementById('route-prefix').value = rt.message_prefix || '';
       openModal('route-modal');
     }
 
