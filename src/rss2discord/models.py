@@ -11,11 +11,14 @@ def utc_now_iso() -> str:
 class WebhookConfig:
     id: str
     name: str
-    url: str
+    url: str = ""
     avatar_url: Optional[str] = None
     username: Optional[str] = None
     color: str = "#5865F2"  # Discord blurple hex
     enabled: bool = True
+    target_type: str = "discord"  # "discord" or "telegram"
+    telegram_bot_token: Optional[str] = None
+    telegram_chat_id: Optional[str] = None
     created_at: str = field(default_factory=utc_now_iso)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -26,11 +29,14 @@ class WebhookConfig:
         return cls(
             id=str(data.get("id", "")),
             name=data.get("name", ""),
-            url=data.get("url", ""),
+            url=data.get("url") or "",
             avatar_url=data.get("avatar_url"),
             username=data.get("username"),
             color=data.get("color", "#5865F2"),
             enabled=data.get("enabled", True),
+            target_type=data.get("target_type", "discord"),
+            telegram_bot_token=data.get("telegram_bot_token"),
+            telegram_chat_id=data.get("telegram_chat_id"),
             created_at=data.get("created_at") or utc_now_iso()
         )
 
