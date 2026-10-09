@@ -27,14 +27,30 @@ class Storage:
                 CREATE TABLE IF NOT EXISTS webhooks (
                     id TEXT PRIMARY KEY,
                     name TEXT NOT NULL,
-                    url TEXT NOT NULL,
+                    url TEXT DEFAULT '',
                     avatar_url TEXT,
                     username TEXT,
                     color TEXT DEFAULT '#5865F2',
                     enabled INTEGER DEFAULT 1,
+                    target_type TEXT DEFAULT 'discord',
+                    telegram_bot_token TEXT,
+                    telegram_chat_id TEXT,
                     created_at TEXT NOT NULL
                 )
             """)
+            try:
+                cursor.execute("ALTER TABLE webhooks ADD COLUMN target_type TEXT DEFAULT 'discord'")
+            except sqlite3.OperationalError:
+                pass
+            try:
+                cursor.execute("ALTER TABLE webhooks ADD COLUMN telegram_bot_token TEXT")
+            except sqlite3.OperationalError:
+                pass
+            try:
+                cursor.execute("ALTER TABLE webhooks ADD COLUMN telegram_chat_id TEXT")
+            except sqlite3.OperationalError:
+                pass
+
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS feeds (
                     id TEXT PRIMARY KEY,
@@ -101,20 +117,25 @@ class Storage:
     def save_webhook(self, webhook: WebhookConfig) -> WebhookConfig:
         if not webhook.id:
             webhook.id = str(uuid.uuid4())
+        target_type = getattr(webhook, "target_type", "discord") or "discord"
         with self._get_connection() as conn:
             conn.execute("""
-                INSERT INTO webhooks (id, name, url, avatar_url, username, color, enabled, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO webhooks (id, name, url, avatar_url, username, color, enabled, target_type, telegram_bot_token, telegram_chat_id, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     name=excluded.name,
                     url=excluded.url,
                     avatar_url=excluded.avatar_url,
                     username=excluded.username,
                     color=excluded.color,
-                    enabled=excluded.enabled
+                    enabled=excluded.enabled,
+                    target_type=excluded.target_type,
+                    telegram_bot_token=excluded.telegram_bot_token,
+                    telegram_chat_id=excluded.telegram_chat_id
             """, (
                 webhook.id, webhook.name, webhook.url, webhook.avatar_url,
                 webhook.username, webhook.color, 1 if webhook.enabled else 0,
+                target_type, webhook.telegram_bot_token, webhook.telegram_chat_id,
                 webhook.created_at
             ))
             conn.commit()
@@ -124,10 +145,14 @@ class Storage:
         with self._get_connection() as conn:
             row = conn.execute("SELECT * FROM webhooks WHERE id = ?", (webhook_id,)).fetchone()
             if row:
+                keys = row.keys()
                 return WebhookConfig(
-                    id=row["id"], name=row["name"], url=row["url"],
+                    id=row["id"], name=row["name"], url=row["url"] or "",
                     avatar_url=row["avatar_url"], username=row["username"],
                     color=row["color"], enabled=bool(row["enabled"]),
+                    target_type=row["target_type"] if "target_type" in keys else "discord",
+                    telegram_bot_token=row["telegram_bot_token"] if "telegram_bot_token" in keys else None,
+                    telegram_chat_id=row["telegram_chat_id"] if "telegram_chat_id" in keys else None,
                     created_at=row["created_at"]
                 )
         return None
@@ -137,10 +162,14 @@ class Storage:
         with self._get_connection() as conn:
             rows = conn.execute("SELECT * FROM webhooks ORDER BY name ASC").fetchall()
             for row in rows:
+                keys = row.keys()
                 webhooks.append(WebhookConfig(
-                    id=row["id"], name=row["name"], url=row["url"],
+                    id=row["id"], name=row["name"], url=row["url"] or "",
                     avatar_url=row["avatar_url"], username=row["username"],
                     color=row["color"], enabled=bool(row["enabled"]),
+                    target_type=row["target_type"] if "target_type" in keys else "discord",
+                    telegram_bot_token=row["telegram_bot_token"] if "telegram_bot_token" in keys else None,
+                    telegram_chat_id=row["telegram_chat_id"] if "telegram_chat_id" in keys else None,
                     created_at=row["created_at"]
                 ))
         return webhooks
@@ -186,9 +215,14 @@ class Storage:
     def update_feed_fetch_status(self, feed_id: str, status: str, error: Optional[str] = None):
         now = datetime.now(timezone.utc).isoformat()
         with self._get_connection() as conn:
-            conn.execute("""
-                UPDATE feeds SET last_fetched_at = ?, last_status = ?, last_error = ? WHERE id = ?
-            """, (now, status, error, feed_id))
+            if status == "ok_no_routes":
+                conn.execute("""
+                    UPDATE feeds SET last_status = ?, last_error = ? WHERE id = ?
+                """, (status, error, feed_id))
+            else:
+                conn.execute("""
+                    UPDATE feeds SET last_fetched_at = ?, last_status = ?, last_error = ? WHERE id = ?
+                """, (now, status, error, feed_id))
             conn.commit()
 
     def get_feed(self, feed_id: str) -> Optional[FeedConfig]:
@@ -285,6 +319,14 @@ class Storage:
             row = conn.execute(
                 "SELECT 1 FROM sent_history WHERE item_hash = ? AND webhook_id = ?",
                 (item_hash, webhook_id)
+            ).fetchone()
+            return row is not None
+
+    def has_sent_items_for_feed(self, feed_id: str) -> bool:
+        with self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM sent_history WHERE feed_id = ?",
+                (feed_id,)
             ).fetchone()
             return row is not None
 
