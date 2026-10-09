@@ -9,6 +9,8 @@ An RSS/Atom feed reader and dispatcher that routes updates from **multiple RSS f
 ## ✨ Features
 
 - **Multi-Feed to Multi-Webhook (M:N Routing)**: Map any number of RSS/Atom/JSON feeds to any number of Discord channels/webhooks with custom message prefixes (e.g., `@everyone` or `<@&role_id>`).
+- **Web UI Dashboard with Basic Auth**: Protect public access to your web dashboard with HTTP Basic Authentication (`--auth user:pass` or `ADMIN_USER`/`ADMIN_PASS` env vars).
+- **Customizable Port & Host**: Easily change the server port (`--port` or `PORT=8080` env var).
 - **Duplicate Prevention**: SQLite persistent storage ensures feed stories are dispatched exactly once, even across system restarts.
 - **Rich Discord Embed Formatting**: Converts HTML descriptions to clean Markdown, extracts lead images/thumbnails (`<media:content>`, `<enclosure>`, `og:image`, `<img>`), formats publish dates, and sets custom embed accent colors per feed or webhook.
 - **Keyword Filtering**: Filter stories using `include_keywords` (must contain) and `exclude_keywords` (must not contain).
@@ -30,24 +32,37 @@ Ensure Python 3.9+ is installed. Clone the repository and install required packa
 git clone https://github.com/BradleyRL/rss2discord.git
 cd rss2discord
 
-pip install feedparser httpx fastapi uvicorn PyYAML
+pip install feedparser httpx fastapi uvicorn PyYAML python-multipart
 ```
 
 ### 2. Launch the Web UI Dashboard
 
-Run the server command to open the visual dashboard:
+Run the server command to open the visual dashboard (default port `8000`):
 
 ```bash
 python3 -m rss2discord serve --port 8000
 ```
 
-Open `http://localhost:8000` in your web browser to start adding feeds and webhooks visually!
+#### 🔒 Basic Auth & Internet Deployment
+
+To secure the dashboard when accessing it from the internet:
+
+```bash
+# Option A: Command line flags
+python3 -m rss2discord serve --port 8080 --auth admin:MySecretPassword123
+
+# Option B: Environment variables (great for Docker / systemd)
+export PORT=8080
+export ADMIN_USER=admin
+export ADMIN_PASS=MySecretPassword123
+python3 -m rss2discord serve
+```
+
+Open `http://localhost:8080` in your browser. You will be prompted to enter your Basic Auth credentials!
 
 ---
 
 ## 🛠️ CLI Usage & Commands
-
-The application includes a command-line interface:
 
 ### 📥 Import / Export Configuration
 
@@ -117,34 +132,28 @@ routes:
 
 ---
 
-## 📜 Systemd Daemon Service Example
-
-To run the RSS daemon continuously in the background on Linux:
+## 📜 Systemd Daemon Service Example with Basic Auth
 
 Create `/etc/systemd/system/rss2discord.service`:
 
 ```ini
 [Unit]
-Description=RSS to Discord Router Daemon
+Description=RSS to Discord Router Web & Daemon Service
 After=network.target
 
 [Service]
 Type=simple
 User=ubuntu
 WorkingDirectory=/home/ubuntu/rss2discord
-ExecStart=/usr/bin/python3 -m rss2discord daemon --interval 300
+Environment=PORT=8080
+Environment=ADMIN_USER=admin
+Environment=ADMIN_PASS=ChangeMeSecretPassword
+ExecStart=/usr/bin/python3 -m rss2discord serve
 Restart=always
 RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
-```
-
-Enable and start the service:
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now rss2discord
 ```
 
 ---

@@ -1,9 +1,11 @@
-from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File
+from fastapi import FastAPI, HTTPException, Depends, status, BackgroundTasks, UploadFile, File
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse, Response
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import os
+import secrets
 import uvicorn
 
 from ..storage import Storage, DEFAULT_DB_PATH
@@ -12,39 +14,75 @@ from ..engine import RSSEngine
 from ..discord_client import DiscordWebhookClient
 from ..rss_parser import RSSFetcher
 
-def create_app(db_path: str = DEFAULT_DB_PATH) -> FastAPI:
+security = HTTPBasic(auto_error=False)
+
+def create_app(
+    db_path: str = DEFAULT_DB_PATH,
+    auth_user: Optional[str] = None,
+    auth_pass: Optional[str] = None
+) -> FastAPI:
     app = FastAPI(title="RSS to Discord Router", version="1.0.0")
     storage = Storage(db_path)
     engine = RSSEngine(storage)
     discord_client = DiscordWebhookClient()
 
+    # Determine authentication credentials from arguments or environment variables
+    env_user = auth_user or os.getenv("ADMIN_USER") or os.getenv("RSS2DISCORD_AUTH_USER")
+    env_pass = auth_pass or os.getenv("ADMIN_PASS") or os.getenv("RSS2DISCORD_AUTH_PASS")
+
+    def verify_auth(credentials: Optional[HTTPBasicCredentials] = Depends(security)):
+        # If authentication credentials are not configured, allow access
+        if not env_user or not env_pass:
+            return True
+
+        if not credentials:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required",
+                headers={"WWW-Authenticate": 'Basic realm="RSS-to-Discord Router Dashboard"'},
+            )
+
+        is_user_correct = secrets.compare_digest(credentials.username.encode("utf-8"), env_user.encode("utf-8"))
+        is_pass_correct = secrets.compare_digest(credentials.password.encode("utf-8"), env_pass.encode("utf-8"))
+
+        if not (is_user_correct and is_pass_correct):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid username or password",
+                headers={"WWW-Authenticate": 'Basic realm="RSS-to-Discord Router Dashboard"'},
+            )
+        return True
+
     static_dir = os.path.join(os.path.dirname(__file__), "static")
     os.makedirs(static_dir, exist_ok=True)
 
+    # Apply authentication dependency globally to protected API endpoints
+    auth_dep = [Depends(verify_auth)]
+
     # --- REST API Routes ---
-    @app.get("/api/stats")
+    @app.get("/api/stats", dependencies=auth_dep)
     def get_stats():
         return storage.get_stats()
 
     # Webhooks
-    @app.get("/api/webhooks")
+    @app.get("/api/webhooks", dependencies=auth_dep)
     def list_webhooks():
         return [w.to_dict() for w in storage.list_webhooks()]
 
-    @app.post("/api/webhooks")
+    @app.post("/api/webhooks", dependencies=auth_dep)
     def save_webhook(data: Dict[str, Any]):
         webhook = WebhookConfig.from_dict(data)
         saved = storage.save_webhook(webhook)
         return saved.to_dict()
 
-    @app.delete("/api/webhooks/{webhook_id}")
+    @app.delete("/api/webhooks/{webhook_id}", dependencies=auth_dep)
     def delete_webhook(webhook_id: str):
         success = storage.delete_webhook(webhook_id)
         if not success:
             raise HTTPException(status_code=404, detail="Webhook not found")
         return {"status": "deleted"}
 
-    @app.post("/api/webhooks/{webhook_id}/test")
+    @app.post("/api/webhooks/{webhook_id}/test", dependencies=auth_dep)
     def test_webhook(webhook_id: str):
         webhook = storage.get_webhook(webhook_id)
         if not webhook:
@@ -55,24 +93,24 @@ def create_app(db_path: str = DEFAULT_DB_PATH) -> FastAPI:
         return {"status": "success", "message": f"Test message sent to '{webhook.name}'"}
 
     # Feeds
-    @app.get("/api/feeds")
+    @app.get("/api/feeds", dependencies=auth_dep)
     def list_feeds():
         return [f.to_dict() for f in storage.list_feeds()]
 
-    @app.post("/api/feeds")
+    @app.post("/api/feeds", dependencies=auth_dep)
     def save_feed(data: Dict[str, Any]):
         feed = FeedConfig.from_dict(data)
         saved = storage.save_feed(feed)
         return saved.to_dict()
 
-    @app.delete("/api/feeds/{feed_id}")
+    @app.delete("/api/feeds/{feed_id}", dependencies=auth_dep)
     def delete_feed(feed_id: str):
         success = storage.delete_feed(feed_id)
         if not success:
             raise HTTPException(status_code=404, detail="Feed not found")
         return {"status": "deleted"}
 
-    @app.post("/api/feeds/{feed_id}/fetch")
+    @app.post("/api/feeds/{feed_id}/fetch", dependencies=auth_dep)
     def fetch_single_feed(feed_id: str):
         feed = storage.get_feed(feed_id)
         if not feed:
@@ -80,7 +118,7 @@ def create_app(db_path: str = DEFAULT_DB_PATH) -> FastAPI:
         result = engine.run_sync(feed_id=feed_id)
         return result
 
-    @app.post("/api/feeds/preview")
+    @app.post("/api/feeds/preview", dependencies=auth_dep)
     def preview_feed(data: Dict[str, Any]):
         url = data.get("url")
         if not url:
@@ -106,17 +144,17 @@ def create_app(db_path: str = DEFAULT_DB_PATH) -> FastAPI:
         }
 
     # Routes
-    @app.get("/api/routes")
+    @app.get("/api/routes", dependencies=auth_dep)
     def list_routes():
         return [r.to_dict() for r in storage.list_routes()]
 
-    @app.post("/api/routes")
+    @app.post("/api/routes", dependencies=auth_dep)
     def save_route(data: Dict[str, Any]):
         route = RouteConfig.from_dict(data)
         saved = storage.save_route(route)
         return saved.to_dict()
 
-    @app.delete("/api/routes/{route_id}")
+    @app.delete("/api/routes/{route_id}", dependencies=auth_dep)
     def delete_route(route_id: str):
         success = storage.delete_route(route_id)
         if not success:
@@ -124,30 +162,30 @@ def create_app(db_path: str = DEFAULT_DB_PATH) -> FastAPI:
         return {"status": "deleted"}
 
     # Logs
-    @app.get("/api/logs")
+    @app.get("/api/logs", dependencies=auth_dep)
     def list_logs(limit: int = 50):
         return [l.to_dict() for l in storage.list_logs(limit)]
 
     # Manual Sync Trigger
-    @app.post("/api/sync")
+    @app.post("/api/sync", dependencies=auth_dep)
     def trigger_sync():
         result = engine.run_sync()
         return result
 
     # Config Export / Import
-    @app.get("/api/config/export")
+    @app.get("/api/config/export", dependencies=auth_dep)
     def export_config():
         yaml_str = storage.export_yaml()
         return Response(content=yaml_str, media_type="application/x-yaml", headers={"Content-Disposition": "attachment; filename=rss2discord.yaml"})
 
-    @app.post("/api/config/import")
+    @app.post("/api/config/import", dependencies=auth_dep)
     async def import_config(file: UploadFile = File(...)):
         content = await file.read()
         storage.import_yaml(content.decode("utf-8"))
         return {"status": "imported"}
 
-    # Serve static assets
-    @app.get("/")
+    # Serve static assets (protected by auth)
+    @app.get("/", dependencies=auth_dep)
     def read_index():
         index_file = os.path.join(static_dir, "index.html")
         if os.path.exists(index_file):

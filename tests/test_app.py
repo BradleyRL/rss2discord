@@ -2,11 +2,13 @@ import unittest
 import os
 import shutil
 import tempfile
+from fastapi.testclient import TestClient
 from src.rss2discord.models import FeedConfig, WebhookConfig, RouteConfig, FeedItem, DeliveryLog
 from src.rss2discord.storage import Storage
 from src.rss2discord.rss_parser import clean_html_to_markdown, extract_image_url
 from src.rss2discord.engine import matches_filters
 from src.rss2discord.discord_client import DiscordWebhookClient, hex_to_int
+from src.rss2discord.web.server import create_app
 
 class TestRSS2Discord(unittest.TestCase):
     def setUp(self):
@@ -75,6 +77,29 @@ class TestRSS2Discord(unittest.TestCase):
     def test_hex_color(self):
         self.assertEqual(hex_to_int("#FF0000"), 0xFF0000)
         self.assertEqual(hex_to_int("5865F2"), 0x5865F2)
+
+    def test_basic_auth(self):
+        # App with Basic Auth enabled
+        app_auth = create_app(db_path=self.db_path, auth_user="admin", auth_pass="secret123")
+        client = TestClient(app_auth)
+
+        # 1. Without credentials -> 401
+        res_no_auth = client.get("/api/stats")
+        self.assertEqual(res_no_auth.status_code, 401)
+
+        # 2. Wrong credentials -> 401
+        res_wrong_auth = client.get("/api/stats", auth=("admin", "wrongpass"))
+        self.assertEqual(res_wrong_auth.status_code, 401)
+
+        # 3. Correct credentials -> 200
+        res_correct_auth = client.get("/api/stats", auth=("admin", "secret123"))
+        self.assertEqual(res_correct_auth.status_code, 200)
+
+        # App without Basic Auth enabled -> 200 without auth
+        app_no_auth = create_app(db_path=self.db_path)
+        client_no_auth = TestClient(app_no_auth)
+        res_open = client_no_auth.get("/api/stats")
+        self.assertEqual(res_open.status_code, 200)
 
 if __name__ == "__main__":
     unittest.main()
