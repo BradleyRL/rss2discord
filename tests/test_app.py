@@ -88,6 +88,21 @@ class TestRSS2Discord(unittest.TestCase):
         saved = self.storage.save_feed(fd)
         self.assertEqual(saved.initial_fetch_mode, "latest_only")
 
+    def test_telegram_webhook_config(self):
+        tg_wh = WebhookConfig(
+            id="", name="Telegram Target", url="",
+            target_type="telegram",
+            telegram_bot_token="123456:ABC-DEF1234ghIkl-zyx57",
+            telegram_chat_id="@my_rss_channel"
+        )
+        saved = self.storage.save_webhook(tg_wh)
+        self.assertEqual(saved.target_type, "telegram")
+
+        retrieved = self.storage.get_webhook(saved.id)
+        self.assertEqual(retrieved.target_type, "telegram")
+        self.assertEqual(retrieved.telegram_bot_token, "123456:ABC-DEF1234ghIkl-zyx57")
+        self.assertEqual(retrieved.telegram_chat_id, "@my_rss_channel")
+
     def test_basic_auth(self):
         # App with Basic Auth enabled
         app_auth = create_app(db_path=self.db_path, auth_user="admin", auth_pass="secret123")

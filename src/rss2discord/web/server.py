@@ -15,6 +15,7 @@ from ..storage import Storage, DEFAULT_DB_PATH
 from ..models import WebhookConfig, FeedConfig, RouteConfig
 from ..engine import RSSEngine
 from ..discord_client import DiscordWebhookClient
+from ..telegram_client import TelegramClient
 from ..rss_parser import RSSFetcher
 
 logger = logging.getLogger("rss2discord.server")
@@ -31,6 +32,7 @@ def create_app(
     storage = Storage(db_path)
     engine = RSSEngine(storage)
     discord_client = DiscordWebhookClient()
+    telegram_client = TelegramClient()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -122,8 +124,14 @@ def create_app(
     def test_webhook(webhook_id: str):
         webhook = storage.get_webhook(webhook_id)
         if not webhook:
-            raise HTTPException(status_code=404, detail="Webhook not found")
-        success, error = discord_client.send_test_message(webhook.url, webhook.name)
+            raise HTTPException(status_code=404, detail="Webhook/Destination not found")
+        
+        target_type = getattr(webhook, "target_type", "discord") or "discord"
+        if target_type == "telegram":
+            success, error = telegram_client.send_test_message(webhook.telegram_bot_token or "", webhook.telegram_chat_id or "", webhook.name)
+        else:
+            success, error = discord_client.send_test_message(webhook.url, webhook.name, webhook.username)
+
         if not success:
             raise HTTPException(status_code=400, detail=error or "Failed to send test message")
         return {"status": "success", "message": f"Test message sent to '{webhook.name}'"}

@@ -6,6 +6,7 @@ from .storage import Storage
 from .models import FeedConfig, WebhookConfig, RouteConfig, FeedItem, DeliveryLog
 from .rss_parser import RSSFetcher
 from .discord_client import DiscordWebhookClient
+from .telegram_client import TelegramClient
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,7 @@ class RSSEngine:
         self.storage = storage
         self.fetcher = RSSFetcher()
         self.discord_client = DiscordWebhookClient()
+        self.telegram_client = TelegramClient()
 
     def run_sync(self, feed_id: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -127,8 +129,12 @@ class RSSEngine:
                         stats["items_skipped_duplicate"] += 1
                         continue
 
-                    # Send to Discord
-                    success, error_msg = self.discord_client.send_embed(webhook, item, feed, route)
+                    # Send to target (Discord or Telegram)
+                    target_type = getattr(webhook, "target_type", "discord") or "discord"
+                    if target_type == "telegram":
+                        success, error_msg = self.telegram_client.send_message(webhook, item, feed, route)
+                    else:
+                        success, error_msg = self.discord_client.send_embed(webhook, item, feed, route)
 
                     log_entry = DeliveryLog(
                         feed_id=feed.id,
