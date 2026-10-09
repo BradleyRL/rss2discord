@@ -83,6 +83,11 @@ class TestRSS2Discord(unittest.TestCase):
         self.assertEqual(sanitize_username("Discord Updates"), "FeedHub Updates")
         self.assertEqual(sanitize_username("clyde@bot"), "Botbot")
 
+    def test_initial_fetch_mode(self):
+        fd = FeedConfig(id="f1", name="New Feed", url="http://test", initial_fetch_mode="latest_only")
+        saved = self.storage.save_feed(fd)
+        self.assertEqual(saved.initial_fetch_mode, "latest_only")
+
     def test_basic_auth(self):
         # App with Basic Auth enabled
         app_auth = create_app(db_path=self.db_path, auth_user="admin", auth_pass="secret123")

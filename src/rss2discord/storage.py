@@ -45,12 +45,17 @@ class Storage:
                     include_keywords TEXT DEFAULT '[]',
                     exclude_keywords TEXT DEFAULT '[]',
                     custom_color TEXT,
+                    initial_fetch_mode TEXT DEFAULT 'latest_only',
                     last_fetched_at TEXT,
                     last_status TEXT DEFAULT 'never_fetched',
                     last_error TEXT,
                     created_at TEXT NOT NULL
                 )
             """)
+            try:
+                cursor.execute("ALTER TABLE feeds ADD COLUMN initial_fetch_mode TEXT DEFAULT 'latest_only'")
+            except sqlite3.OperationalError:
+                pass
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS routes (
                     id TEXT PRIMARY KEY,
@@ -153,10 +158,11 @@ class Storage:
             feed.id = str(uuid.uuid4())
         inc_json = json.dumps(feed.include_keywords)
         exc_json = json.dumps(feed.exclude_keywords)
+        initial_mode = getattr(feed, "initial_fetch_mode", "latest_only") or "latest_only"
         with self._get_connection() as conn:
             conn.execute("""
-                INSERT INTO feeds (id, name, url, fetch_interval_minutes, enabled, include_keywords, exclude_keywords, custom_color, last_fetched_at, last_status, last_error, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO feeds (id, name, url, fetch_interval_minutes, enabled, include_keywords, exclude_keywords, custom_color, initial_fetch_mode, last_fetched_at, last_status, last_error, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     name=excluded.name,
                     url=excluded.url,
@@ -165,13 +171,14 @@ class Storage:
                     include_keywords=excluded.include_keywords,
                     exclude_keywords=excluded.exclude_keywords,
                     custom_color=excluded.custom_color,
+                    initial_fetch_mode=excluded.initial_fetch_mode,
                     last_fetched_at=excluded.last_fetched_at,
                     last_status=excluded.last_status,
                     last_error=excluded.last_error
             """, (
                 feed.id, feed.name, feed.url, feed.fetch_interval_minutes,
                 1 if feed.enabled else 0, inc_json, exc_json, feed.custom_color,
-                feed.last_fetched_at, feed.last_status, feed.last_error, feed.created_at
+                initial_mode, feed.last_fetched_at, feed.last_status, feed.last_error, feed.created_at
             ))
             conn.commit()
         return feed
@@ -195,6 +202,7 @@ class Storage:
                     include_keywords=json.loads(row["include_keywords"] or "[]"),
                     exclude_keywords=json.loads(row["exclude_keywords"] or "[]"),
                     custom_color=row["custom_color"],
+                    initial_fetch_mode=row["initial_fetch_mode"] if "initial_fetch_mode" in row.keys() else "latest_only",
                     last_fetched_at=row["last_fetched_at"],
                     last_status=row["last_status"],
                     last_error=row["last_error"],
@@ -214,6 +222,7 @@ class Storage:
                     include_keywords=json.loads(row["include_keywords"] or "[]"),
                     exclude_keywords=json.loads(row["exclude_keywords"] or "[]"),
                     custom_color=row["custom_color"],
+                    initial_fetch_mode=row["initial_fetch_mode"] if "initial_fetch_mode" in row.keys() else "latest_only",
                     last_fetched_at=row["last_fetched_at"],
                     last_status=row["last_status"],
                     last_error=row["last_error"],

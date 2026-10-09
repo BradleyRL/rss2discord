@@ -45,6 +45,7 @@ class FeedConfig:
     include_keywords: List[str] = field(default_factory=list)
     exclude_keywords: List[str] = field(default_factory=list)
     custom_color: Optional[str] = None
+    initial_fetch_mode: str = "latest_only"  # latest_only, mute_all, all
     last_fetched_at: Optional[str] = None
     last_status: str = "never_fetched"  # ok, error, never_fetched
     last_error: Optional[str] = None
@@ -71,6 +72,7 @@ class FeedConfig:
             include_keywords=inc,
             exclude_keywords=exc,
             custom_color=data.get("custom_color"),
+            initial_fetch_mode=data.get("initial_fetch_mode", "latest_only"),
             last_fetched_at=data.get("last_fetched_at"),
             last_status=data.get("last_status", "never_fetched"),
             last_error=data.get("last_error"),

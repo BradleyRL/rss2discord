@@ -76,8 +76,27 @@ class RSSEngine:
                 stats["errors"].append({"feed_name": feed.name, "error": fetch_error})
                 continue
 
+            is_first_fetch = (feed.last_fetched_at is None or feed.last_status == "never_fetched")
             self.storage.update_feed_fetch_status(feed.id, "ok")
             stats["items_found"] += len(items)
+
+            # If this is the first time fetching a newly added feed, restrict initial dispatch
+            if is_first_fetch and items:
+                init_mode = getattr(feed, "initial_fetch_mode", "latest_only") or "latest_only"
+                if init_mode == "latest_only":
+                    # Keep only the newest item (items[0]) and mute all older historical items (items[1:])
+                    muted_count = len(items) - 1
+                    for older_item in items[1:]:
+                        for route in feed_routes:
+                            self.storage.mark_item_sent(older_item.item_hash, feed.id, route.webhook_id)
+                    items = [items[0]]
+                    logger.info(f"First run for newly added feed '{feed.name}': Dispatched 1 latest story, muted {muted_count} older historical stories.")
+                elif init_mode == "mute_all":
+                    for muted_item in items:
+                        for route in feed_routes:
+                            self.storage.mark_item_sent(muted_item.item_hash, feed.id, route.webhook_id)
+                    items = []
+                    logger.info(f"First run for newly added feed '{feed.name}': Muted all {len(items)} historical stories.")
 
             for item in items:
                 # Check keyword filter rules
