@@ -9,7 +9,8 @@ An RSS/Atom feed reader and dispatcher that routes updates from **multiple RSS f
 ## ✨ Features
 
 - **Multi-Feed to Multi-Webhook (M:N Routing)**: Map any number of RSS/Atom/JSON feeds to any number of Discord channels/webhooks with custom message prefixes (e.g., `@everyone` or `<@&role_id>`).
-- **Virtual Env & `.env` Support**: Runs cleanly inside Python virtual environments (`.venv`), Docker containers, or systemd services with `.env` configuration file loading.
+- **All-in-One Web UI & Polling Worker**: A single command (`rss2discord serve`) hosts the dashboard and automatically polls feeds in the background.
+- **Virtual Env & `.env` Support**: Runs cleanly inside Python virtual environments (`.venv`) or systemd services with `.env` configuration file loading.
 - **Web UI Dashboard with Basic Auth**: Protect public access to your web dashboard with HTTP Basic Authentication (`--auth user:pass` or `ADMIN_USER`/`ADMIN_PASS` env vars).
 - **Customizable Port & Host**: Easily change the server port (`--port` or `PORT=8080` env var).
 - **Duplicate Prevention**: SQLite persistent storage ensures feed stories are dispatched exactly once, even across system restarts.
@@ -18,9 +19,7 @@ An RSS/Atom feed reader and dispatcher that routes updates from **multiple RSS f
 
 ---
 
-## 🚀 Running inside Environments
-
-### 🐍 Option 1: Python Virtual Environment (`.venv`) & `.env` file
+## 🚀 Quick Start (Python Virtual Environment)
 
 1. **Create and activate a virtual environment:**
 
@@ -53,35 +52,13 @@ An RSS/Atom feed reader and dispatcher that routes updates from **multiple RSS f
    ADMIN_PASS=MySecretPassword123!
    ```
 
-4. **Run the Dashboard or Daemon:**
+4. **Launch the Dashboard:**
 
    ```bash
-   # Run Web Dashboard (automatically loads .env):
    rss2discord serve
-
-   # Or run continuous background daemon:
-   rss2discord daemon --interval 300
    ```
 
----
-
-### 🐳 Option 2: Docker & Docker Compose Container Environment
-
-Run the application inside an isolated Docker environment:
-
-1. **Copy `.env.example` to `.env`:**
-
-   ```bash
-   cp .env.example .env
-   ```
-
-2. **Start with Docker Compose:**
-
-   ```bash
-   docker compose up -d
-   ```
-
-   The app will run inside a container on port `8000` with volume persistence in `./data/`.
+   Open `http://localhost:8000` (or `http://YOUR_SERVER_IP:8000`) in your web browser!
 
 ---
 
@@ -97,15 +74,47 @@ rss2discord list
 # Test a webhook:
 rss2discord test-webhook "https://discord.com/api/webhooks/YOUR_URL"
 
-# Single sync cycle (for cron):
+# Run a single sync cycle:
 rss2discord sync
+```
+
+---
+
+## 📜 Systemd Service Setup
+
+To run the application automatically on Linux boot:
+
+Create `/etc/systemd/system/rss2discord.service`:
+
+```ini
+[Unit]
+Description=RSS to Discord Router Web & Polling Service
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/rss2discord
+ExecStart=/home/ubuntu/rss2discord/.venv/bin/rss2discord serve
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable and start the service:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now rss2discord
 ```
 
 ---
 
 ## 🧪 Running Tests
 
-Run the unit test suite inside your environment:
+Run the unit test suite inside your virtual environment:
 
 ```bash
 PYTHONPATH=src python3 -m unittest discover -s tests
