@@ -382,7 +382,7 @@
     <!-- Navigation Tabs -->
     <div class="nav-tabs">
       <button class="tab-btn active" onclick="switchTab('feeds')">📡 Feeds</button>
-      <button class="tab-btn" onclick="switchTab('webhooks')">🔔 Webhooks</button>
+      <button class="tab-btn" onclick="switchTab('webhooks')">🔔 Destinations</button>
       <button class="tab-btn" onclick="switchTab('routes')">🔀 Routes (M:N)</button>
       <button class="tab-btn" onclick="switchTab('logs')">📜 Delivery Logs</button>
       <button class="tab-btn" onclick="switchTab('preview')">🔍 Live Feed Preview</button>
@@ -415,27 +415,27 @@
       </div>
     </div>
 
-    <!-- TAB 2: WEBHOOKS -->
+    <!-- TAB 2: WEBHOOKS / DESTINATIONS -->
     <div id="tab-webhooks" class="tab-content" style="display: none;">
       <div class="glass-card">
         <div class="card-header">
-          <h2 class="card-title">Discord Webhooks</h2>
-          <button class="btn" onclick="openWebhookModal()">+ Add New Webhook</button>
+          <h2 class="card-title">Notification Destinations (Discord & Telegram)</h2>
+          <button class="btn" onclick="openWebhookModal()">+ Add New Destination</button>
         </div>
         <div class="table-container">
           <table>
             <thead>
               <tr>
                 <th>Name</th>
-                <th>Webhook URL</th>
-                <th>Override User / Avatar</th>
+                <th>Target Details</th>
+                <th>Platform</th>
                 <th>Color</th>
                 <th>Status</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody id="webhooks-tbody">
-              <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Loading webhooks...</td></tr>
+              <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Loading destinations...</td></tr>
             </tbody>
           </table>
         </div>
@@ -446,7 +446,7 @@
     <div id="tab-routes" class="tab-content" style="display: none;">
       <div class="glass-card">
         <div class="card-header">
-          <h2 class="card-title">Routing Rules (Multi-Feed -> Multi-Webhook)</h2>
+          <h2 class="card-title">Routing Rules (Multi-Feed -> Multi-Destination)</h2>
           <button class="btn" onclick="openRouteModal()">+ Create New Route</button>
         </div>
         <div class="table-container">
@@ -455,7 +455,7 @@
               <tr>
                 <th>Route Name</th>
                 <th>Source Feed</th>
-                <th>Target Webhook</th>
+                <th>Target Destination</th>
                 <th>Mention / Prefix</th>
                 <th>Status</th>
                 <th>Actions</th>
@@ -483,7 +483,7 @@
                 <th>Time (UTC)</th>
                 <th>Story Title</th>
                 <th>Feed</th>
-                <th>Webhook</th>
+                <th>Destination</th>
                 <th>Status</th>
                 <th>Details</th>
               </tr>
@@ -500,7 +500,7 @@
     <div id="tab-preview" class="tab-content" style="display: none;">
       <div class="glass-card">
         <div class="card-header">
-          <h2 class="card-title">Live RSS Feed Inspector & Discord Embed Preview</h2>
+          <h2 class="card-title">Live RSS Feed Inspector & Preview</h2>
         </div>
         <div class="form-group" style="display: flex; gap: 1rem;">
           <input type="url" id="preview-url" placeholder="https://news.ycombinator.com/rss" style="flex: 1;">
@@ -553,38 +553,62 @@
     </div>
   </div>
 
-  <!-- MODAL: ADD/EDIT WEBHOOK -->
+  <!-- MODAL: ADD/EDIT WEBHOOK / DESTINATION -->
   <div class="modal-overlay" id="webhook-modal">
     <div class="modal">
-      <h3 style="margin-bottom: 1rem; font-family: 'Outfit';" id="webhook-modal-title">Add Discord Webhook</h3>
+      <h3 style="margin-bottom: 1rem; font-family: 'Outfit';" id="webhook-modal-title">Add Destination Target</h3>
       <form id="webhook-form" onsubmit="saveWebhook(event)">
         <input type="hidden" id="webhook-id">
         <div class="form-group">
-          <label>Webhook Name</label>
-          <input type="text" id="webhook-name" required placeholder="e.g. #tech-news-channel">
+          <label>Destination Name</label>
+          <input type="text" id="webhook-name" required placeholder="e.g. #tech-news or Telegram @my_channel">
         </div>
         <div class="form-group">
-          <label>Discord Webhook URL</label>
-          <input type="url" id="webhook-url" required placeholder="https://discord.com/api/webhooks/...">
+          <label>Platform / Target Type</label>
+          <select id="webhook-target-type" onchange="toggleTargetFields(this.value)">
+            <option value="discord">🔵 Discord Webhook</option>
+            <option value="telegram">✈️ Telegram Bot API</option>
+          </select>
         </div>
-        <div class="form-group">
-          <label>Override Username (Optional)</label>
-          <input type="text" id="webhook-username" placeholder="Tech News Bot">
-        </div>
-        <div class="form-group">
-          <label>Override Avatar URL (Optional)</label>
-          <input type="url" id="webhook-avatar" placeholder="https://example.com/avatar.png">
-        </div>
-        <div class="form-group">
-          <label>Default Color</label>
-          <div style="display: flex; gap: 0.5rem; align-items: center;">
-            <input type="color" id="webhook-color-picker" value="#5865F2" style="width: 44px; height: 38px; border: 1px solid var(--border-color); border-radius: 8px; cursor: pointer; background: transparent; padding: 2px;" oninput="document.getElementById('webhook-color').value = this.value">
-            <input type="text" id="webhook-color" value="#5865F2" style="flex: 1;" oninput="syncColorPicker('webhook-color', 'webhook-color-picker')">
+
+        <!-- Discord Specific Fields -->
+        <div id="discord-fields">
+          <div class="form-group">
+            <label>Discord Webhook URL</label>
+            <input type="url" id="webhook-url" placeholder="https://discord.com/api/webhooks/...">
+          </div>
+          <div class="form-group">
+            <label>Override Username (Optional)</label>
+            <input type="text" id="webhook-username" placeholder="Tech News Bot">
+          </div>
+          <div class="form-group">
+            <label>Override Avatar URL (Optional)</label>
+            <input type="url" id="webhook-avatar" placeholder="https://example.com/avatar.png">
+          </div>
+          <div class="form-group">
+            <label>Embed Accent Color</label>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+              <input type="color" id="webhook-color-picker" value="#5865F2" style="width: 44px; height: 38px; border: 1px solid var(--border-color); border-radius: 8px; cursor: pointer; background: transparent; padding: 2px;" oninput="document.getElementById('webhook-color').value = this.value">
+              <input type="text" id="webhook-color" value="#5865F2" style="flex: 1;" oninput="syncColorPicker('webhook-color', 'webhook-color-picker')">
+            </div>
           </div>
         </div>
+
+        <!-- Telegram Specific Fields -->
+        <div id="telegram-fields" style="display: none;">
+          <div class="form-group">
+            <label>Telegram Bot Token (from @BotFather)</label>
+            <input type="text" id="webhook-telegram-token" placeholder="123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ">
+          </div>
+          <div class="form-group">
+            <label>Telegram Chat ID or Channel Username</label>
+            <input type="text" id="webhook-telegram-chatid" placeholder="@my_channel or -100123456789">
+          </div>
+        </div>
+
         <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem;">
           <button type="button" class="btn btn-secondary" onclick="closeModal('webhook-modal')">Cancel</button>
-          <button type="submit" class="btn">Save Webhook</button>
+          <button type="submit" class="btn">Save Destination</button>
         </div>
       </form>
     </div>
@@ -605,7 +629,7 @@
           <select id="route-feed-id" required></select>
         </div>
         <div class="form-group">
-          <label>Target Webhook</label>
+          <label>Target Webhook / Destination</label>
           <select id="route-webhook-id" required></select>
         </div>
         <div class="form-group">
@@ -706,15 +730,19 @@
         const r = await fetch('/api/webhooks');
         cache.webhooks = await r.json();
         if (cache.webhooks.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No webhooks configured. Click "+ Add New Webhook" to create one.</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No destinations configured. Click "+ Add New Webhook" to create one.</td></tr>';
           return;
         }
-        tbody.innerHTML = cache.webhooks.map(w => `
+        tbody.innerHTML = cache.webhooks.map(w => {
+          const isTelegram = w.target_type === 'telegram';
+          const targetBadge = isTelegram ? `<span class="badge badge-info">✈️ Telegram</span>` : `<span class="badge badge-info">🔵 Discord</span>`;
+          const details = isTelegram ? `Chat: ${escapeHtml(w.telegram_chat_id || '')}` : `${escapeHtml((w.url || '').substring(0, 40))}...`;
+          return `
           <tr>
             <td><strong>${escapeHtml(w.name)}</strong></td>
-            <td style="font-family: monospace; font-size: 0.8rem; color: var(--text-muted);">${escapeHtml(w.url.substring(0, 45))}...</td>
-            <td>${w.username ? escapeHtml(w.username) : '<i>Default</i>'}</td>
-            <td><span style="display:inline-block; width:14px; height:14px; background:${w.color}; border-radius:3px; vertical-align:middle;"></span> ${w.color}</td>
+            <td style="font-family: monospace; font-size: 0.8rem; color: var(--text-muted);">${details}</td>
+            <td>${targetBadge}</td>
+            <td><span style="display:inline-block; width:14px; height:14px; background:${w.color || '#5865F2'}; border-radius:3px; vertical-align:middle;"></span> ${w.color || '#5865F2'}</td>
             <td><span class="badge badge-success">Active</span></td>
             <td>
               <button class="btn btn-secondary" style="padding: 0.3rem 0.6rem;" onclick="editWebhook('${w.id}')">✏️ Edit</button>
@@ -722,81 +750,26 @@
               <button class="btn btn-danger" style="padding: 0.3rem 0.6rem;" onclick="deleteWebhook('${w.id}')">🗑️</button>
             </td>
           </tr>
-        `).join('');
+        `}).join('');
       } catch (e) {
         tbody.innerHTML = '<tr><td colspan="6" style="color: var(--accent-red);">Error loading webhooks</td></tr>';
       }
     }
 
-    // --- Routes ---
-    async function loadRoutes() {
-      const tbody = document.getElementById('routes-tbody');
-      try {
-        const r = await fetch('/api/routes');
-        cache.routes = await r.json();
-        if (cache.routes.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No routes configured. Map a Feed to a Webhook to enable delivery.</td></tr>';
-          return;
-        }
-
-        const feedMap = Object.fromEntries(cache.feeds.map(f => [f.id, f.name]));
-        const webhookMap = Object.fromEntries(cache.webhooks.map(w => [w.id, w.name]));
-
-        tbody.innerHTML = cache.routes.map(rt => `
-          <tr>
-            <td><strong>${escapeHtml(rt.name)}</strong></td>
-            <td><span class="badge badge-info">📡 ${escapeHtml(feedMap[rt.feed_id] || rt.feed_id)}</span></td>
-            <td><span class="badge badge-info">🔔 ${escapeHtml(webhookMap[rt.webhook_id] || rt.webhook_id)}</span></td>
-            <td>${rt.message_prefix ? `<code>${escapeHtml(rt.message_prefix)}</code>` : '-'}</td>
-            <td><span class="badge badge-success">Enabled</span></td>
-            <td>
-              <button class="btn btn-secondary" style="padding: 0.3rem 0.6rem;" onclick="editRoute('${rt.id}')">✏️ Edit</button>
-              <button class="btn btn-danger" style="padding: 0.3rem 0.6rem;" onclick="deleteRoute('${rt.id}')">🗑️</button>
-            </td>
-          </tr>
-        `).join('');
-      } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="6" style="color: var(--accent-red);">Error loading routes</td></tr>';
+    function toggleTargetFields(type) {
+      if (type === 'telegram') {
+        document.getElementById('discord-fields').style.display = 'none';
+        document.getElementById('telegram-fields').style.display = 'block';
+        document.getElementById('webhook-url').required = false;
+        document.getElementById('webhook-telegram-token').required = true;
+        document.getElementById('webhook-telegram-chatid').required = true;
+      } else {
+        document.getElementById('discord-fields').style.display = 'block';
+        document.getElementById('telegram-fields').style.display = 'none';
+        document.getElementById('webhook-url').required = true;
+        document.getElementById('webhook-telegram-token').required = false;
+        document.getElementById('webhook-telegram-chatid').required = false;
       }
-    }
-
-    // --- Logs ---
-    async function loadLogs() {
-      const tbody = document.getElementById('logs-tbody');
-      try {
-        const r = await fetch('/api/logs?limit=30');
-        const logs = await r.json();
-        if (logs.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No delivery logs recorded yet.</td></tr>';
-          return;
-        }
-        tbody.innerHTML = logs.map(l => `
-          <tr>
-            <td style="font-size: 0.8rem; color: var(--text-muted);">${new Date(l.delivered_at).toLocaleString()}</td>
-            <td><strong><a href="${escapeHtml(l.item_link)}" target="_blank" style="color: #fff; text-decoration: none;">${escapeHtml(l.item_title)}</a></strong></td>
-            <td>${escapeHtml(l.feed_name)}</td>
-            <td>${escapeHtml(l.webhook_name)}</td>
-            <td><span class="badge ${l.status === 'success' ? 'badge-success' : 'badge-error'}">${l.status}</span></td>
-            <td style="font-size: 0.8rem; color: var(--accent-red);">${l.error_message ? escapeHtml(l.error_message) : '-'}</td>
-          </tr>
-        `).join('');
-      } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="6" style="color: var(--accent-red);">Error loading logs</td></tr>';
-      }
-    }
-
-    // Color Sync Helpers
-    function syncColorPicker(textId, pickerId) {
-      const val = document.getElementById(textId).value.trim();
-      if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
-        document.getElementById(pickerId).value = val;
-      }
-    }
-    function setColorValues(textId, pickerId, val, defaultHex = '#5865F2') {
-      const hex = val || '';
-      document.getElementById(textId).value = hex;
-      const validHex = /^#[0-9A-Fa-f]{6}$/.test(hex) ? hex : defaultHex;
-      document.getElementById(pickerId).value = validHex;
     }
 
     // Modal Helpers
@@ -814,7 +787,9 @@
     function openWebhookModal() {
       document.getElementById('webhook-form').reset();
       document.getElementById('webhook-id').value = '';
-      document.getElementById('webhook-modal-title').innerText = 'Add Discord Webhook';
+      document.getElementById('webhook-modal-title').innerText = 'Add Destination Target';
+      document.getElementById('webhook-target-type').value = 'discord';
+      toggleTargetFields('discord');
       setColorValues('webhook-color', 'webhook-color-picker', '#5865F2', '#5865F2');
       openModal('webhook-modal');
     }
@@ -851,12 +826,18 @@
     function editWebhook(id) {
       const w = cache.webhooks.find(item => item.id === id);
       if (!w) return;
-      document.getElementById('webhook-modal-title').innerText = 'Edit Discord Webhook';
+      document.getElementById('webhook-modal-title').innerText = 'Edit Destination Target';
       document.getElementById('webhook-id').value = w.id;
       document.getElementById('webhook-name').value = w.name;
-      document.getElementById('webhook-url').value = w.url;
+      const tType = w.target_type || 'discord';
+      document.getElementById('webhook-target-type').value = tType;
+      toggleTargetFields(tType);
+
+      document.getElementById('webhook-url').value = w.url || '';
       document.getElementById('webhook-username').value = w.username || '';
       document.getElementById('webhook-avatar').value = w.avatar_url || '';
+      document.getElementById('webhook-telegram-token').value = w.telegram_bot_token || '';
+      document.getElementById('webhook-telegram-chatid').value = w.telegram_chat_id || '';
       setColorValues('webhook-color', 'webhook-color-picker', w.color || '#5865F2', '#5865F2');
       openModal('webhook-modal');
     }
@@ -908,12 +889,16 @@
 
     async function saveWebhook(e) {
       e.preventDefault();
+      const targetType = document.getElementById('webhook-target-type').value;
       const data = {
         id: document.getElementById('webhook-id').value || undefined,
         name: document.getElementById('webhook-name').value,
-        url: document.getElementById('webhook-url').value,
+        target_type: targetType,
+        url: document.getElementById('webhook-url').value || "",
         username: document.getElementById('webhook-username').value || null,
         avatar_url: document.getElementById('webhook-avatar').value || null,
+        telegram_bot_token: document.getElementById('webhook-telegram-token').value || null,
+        telegram_chat_id: document.getElementById('webhook-telegram-chatid').value || null,
         color: document.getElementById('webhook-color').value || '#5865F2'
       };
 
@@ -924,10 +909,10 @@
       });
       if (r.ok) {
         closeModal('webhook-modal');
-        showToast('Webhook saved successfully');
+        showToast('Destination saved successfully');
         loadAll();
       } else {
-        showToast('Failed to save webhook', true);
+        showToast('Failed to save destination', true);
       }
     }
 
