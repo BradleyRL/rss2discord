@@ -382,7 +382,7 @@
     <!-- Navigation Tabs -->
     <div class="nav-tabs">
       <button class="tab-btn active" onclick="switchTab('feeds')">📡 Feeds</button>
-      <button class="tab-btn" onclick="switchTab('webhooks')">🔔 Destinations</button>
+      <button class="tab-btn" onclick="switchTab('webhooks')">🔔 Webhooks</button>
       <button class="tab-btn" onclick="switchTab('routes')">🔀 Routes (M:N)</button>
       <button class="tab-btn" onclick="switchTab('logs')">📜 Delivery Logs</button>
       <button class="tab-btn" onclick="switchTab('preview')">🔍 Live Feed Preview</button>
@@ -415,27 +415,27 @@
       </div>
     </div>
 
-    <!-- TAB 2: WEBHOOKS / DESTINATIONS -->
+    <!-- TAB 2: WEBHOOKS -->
     <div id="tab-webhooks" class="tab-content" style="display: none;">
       <div class="glass-card">
         <div class="card-header">
-          <h2 class="card-title">Notification Destinations (Discord & Telegram)</h2>
-          <button class="btn" onclick="openWebhookModal()">+ Add New Destination</button>
+          <h2 class="card-title">Discord Webhooks</h2>
+          <button class="btn" onclick="openWebhookModal()">+ Add New Webhook</button>
         </div>
         <div class="table-container">
           <table>
             <thead>
               <tr>
                 <th>Name</th>
-                <th>Target Details</th>
-                <th>Platform</th>
+                <th>Webhook URL</th>
+                <th>Override User / Avatar</th>
                 <th>Color</th>
                 <th>Status</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody id="webhooks-tbody">
-              <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Loading destinations...</td></tr>
+              <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Loading webhooks...</td></tr>
             </tbody>
           </table>
         </div>
@@ -446,7 +446,7 @@
     <div id="tab-routes" class="tab-content" style="display: none;">
       <div class="glass-card">
         <div class="card-header">
-          <h2 class="card-title">Routing Rules (Multi-Feed -> Multi-Destination)</h2>
+          <h2 class="card-title">Routing Rules (Multi-Feed -> Multi-Webhook)</h2>
           <button class="btn" onclick="openRouteModal()">+ Create New Route</button>
         </div>
         <div class="table-container">
@@ -455,7 +455,7 @@
               <tr>
                 <th>Route Name</th>
                 <th>Source Feed</th>
-                <th>Target Destination</th>
+                <th>Target Webhook</th>
                 <th>Mention / Prefix</th>
                 <th>Status</th>
                 <th>Actions</th>
@@ -483,7 +483,7 @@
                 <th>Time (UTC)</th>
                 <th>Story Title</th>
                 <th>Feed</th>
-                <th>Destination</th>
+                <th>Webhook</th>
                 <th>Status</th>
                 <th>Details</th>
               </tr>
@@ -500,7 +500,7 @@
     <div id="tab-preview" class="tab-content" style="display: none;">
       <div class="glass-card">
         <div class="card-header">
-          <h2 class="card-title">Live RSS Feed Inspector & Preview</h2>
+          <h2 class="card-title">Live RSS Feed Inspector & Discord Embed Preview</h2>
         </div>
         <div class="form-group" style="display: flex; gap: 1rem;">
           <input type="url" id="preview-url" placeholder="https://news.ycombinator.com/rss" style="flex: 1;">
@@ -629,7 +629,7 @@
           <select id="route-feed-id" required></select>
         </div>
         <div class="form-group">
-          <label>Target Webhook / Destination</label>
+          <label>Target Webhook</label>
           <select id="route-webhook-id" required></select>
         </div>
         <div class="form-group">
@@ -754,6 +754,73 @@
       } catch (e) {
         tbody.innerHTML = '<tr><td colspan="6" style="color: var(--accent-red);">Error loading webhooks</td></tr>';
       }
+    }
+
+    // --- Routes ---
+    async function loadRoutes() {
+      const tbody = document.getElementById('routes-tbody');
+      try {
+        const r = await fetch('/api/routes');
+        cache.routes = await r.json();
+        if (cache.routes.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No routes configured. Click "+ Create New Route" to link a feed to a destination.</td></tr>';
+          return;
+        }
+        const feedName = id => (cache.feeds.find(f => f.id === id) || {}).name || id;
+        const whName = id => (cache.webhooks.find(w => w.id === id) || {}).name || id;
+        tbody.innerHTML = cache.routes.map(rt => `
+          <tr>
+            <td><strong>${escapeHtml(rt.name)}</strong></td>
+            <td>${escapeHtml(feedName(rt.feed_id))}</td>
+            <td>${escapeHtml(whName(rt.webhook_id))}</td>
+            <td>${rt.message_prefix ? escapeHtml(rt.message_prefix) : '-'}</td>
+            <td><span class="badge ${rt.enabled === false ? 'badge-error' : 'badge-success'}">${rt.enabled === false ? 'Disabled' : 'Active'}</span></td>
+            <td>
+              <button class="btn btn-secondary" style="padding: 0.3rem 0.6rem;" onclick="editRoute('${rt.id}')">✏️ Edit</button>
+              <button class="btn btn-danger" style="padding: 0.3rem 0.6rem;" onclick="deleteRoute('${rt.id}')">🗑️</button>
+            </td>
+          </tr>
+        `).join('');
+      } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="6" style="color: var(--accent-red);">Error loading routes</td></tr>';
+      }
+    }
+
+    // --- Logs ---
+    async function loadLogs() {
+      const tbody = document.getElementById('logs-tbody');
+      try {
+        const r = await fetch('/api/logs');
+        const logs = await r.json();
+        if (!logs.length) {
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No deliveries yet.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = logs.map(l => `
+          <tr>
+            <td style="white-space: nowrap;">${escapeHtml((l.delivered_at || '').replace('T', ' ').substring(0, 19))}</td>
+            <td>${l.item_link ? `<a href="${escapeHtml(l.item_link)}" target="_blank" style="color: var(--accent-cyan); text-decoration: none;">${escapeHtml(l.item_title)}</a>` : escapeHtml(l.item_title)}</td>
+            <td>${escapeHtml(l.feed_name || l.feed_id)}</td>
+            <td>${escapeHtml(l.webhook_name || l.webhook_id)}</td>
+            <td><span class="badge ${l.status === 'success' ? 'badge-success' : (l.status === 'failed' ? 'badge-error' : 'badge-info')}">${escapeHtml(l.status)}</span></td>
+            <td style="font-size: 0.8rem; color: var(--text-muted);">${escapeHtml(l.error_message || '-')}</td>
+          </tr>
+        `).join('');
+      } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="6" style="color: var(--accent-red);">Error loading logs</td></tr>';
+      }
+    }
+
+    // --- Color picker helpers ---
+    function setColorValues(textId, pickerId, value, fallback) {
+      document.getElementById(textId).value = value || '';
+      document.getElementById(pickerId).value = /^#[0-9a-fA-F]{6}$/.test(value || '') ? value : fallback;
+    }
+
+    function syncColorPicker(textId, pickerId) {
+      let v = document.getElementById(textId).value.trim();
+      if (v && !v.startsWith('#')) v = '#' + v;
+      if (/^#[0-9a-fA-F]{6}$/.test(v)) document.getElementById(pickerId).value = v;
     }
 
     function toggleTargetFields(type) {
@@ -967,7 +1034,7 @@
       showToast('Sending test message...');
       const r = await fetch(`/api/webhooks/${id}/test`, { method: 'POST' });
       if (r.ok) {
-        showToast('Test message delivered to Discord!');
+        showToast('Test message delivered!');
       } else {
         const err = await r.json();
         showToast(`Test failed: ${err.detail}`, true);
