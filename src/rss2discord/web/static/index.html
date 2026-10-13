@@ -650,29 +650,51 @@
   <script>
     let cache = { feeds: [], webhooks: [], routes: [] };
 
-    document.addEventListener('DOMContentLoaded', () => {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', loadAll);
+    } else {
       loadAll();
+    }
+
+    // Close modal when clicking outside of modal card
+    document.addEventListener('DOMContentLoaded', () => {
+      document.querySelectorAll('.modal-overlay').forEach(overlay => {
+        overlay.addEventListener('click', (e) => {
+          if (e.target === overlay) {
+            overlay.classList.remove('active');
+          }
+        });
+      });
     });
 
     async function loadAll() {
-      await Promise.all([loadStats(), loadFeeds(), loadWebhooks(), loadRoutes(), loadLogs()]);
+      try {
+        await Promise.all([loadStats(), loadFeeds(), loadWebhooks(), loadLogs()]);
+        await loadRoutes();
+      } catch (err) {
+        console.error('loadAll error:', err);
+      }
     }
 
     function showToast(msg, isError = false) {
       const c = document.getElementById('toast-container');
+      if (!c) return;
       const t = document.createElement('div');
       t.className = 'toast';
       if (isError) t.style.borderLeftColor = 'var(--accent-red)';
       t.innerText = msg;
       c.appendChild(t);
-      setTimeout(() => t.remove(), 4000);
+      setTimeout(() => { if (t.parentNode) t.remove(); }, 4000);
     }
 
     function switchTab(tabName) {
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
       
-      const btn = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.getAttribute('onclick').includes(tabName));
+      const btn = Array.from(document.querySelectorAll('.tab-btn')).find(b => {
+        const oc = b.getAttribute('onclick') || '';
+        return oc.includes(`'${tabName}'`) || oc.includes(`"${tabName}"`);
+      });
       if (btn) btn.classList.add('active');
       
       const content = document.getElementById(`tab-${tabName}`);
@@ -683,12 +705,15 @@
     async function loadStats() {
       try {
         const r = await fetch('/api/stats');
+        if (!r.ok) return;
         const s = await r.json();
-        document.getElementById('stat-feeds').innerText = s.active_feeds;
-        document.getElementById('stat-webhooks').innerText = s.total_webhooks;
-        document.getElementById('stat-routes').innerText = s.active_routes;
-        document.getElementById('stat-dispatched').innerText = s.total_dispatched;
-      } catch (e) {}
+        document.getElementById('stat-feeds').innerText = s.active_feeds ?? 0;
+        document.getElementById('stat-webhooks').innerText = s.total_webhooks ?? 0;
+        document.getElementById('stat-routes').innerText = s.active_routes ?? 0;
+        document.getElementById('stat-dispatched').innerText = s.total_dispatched ?? 0;
+      } catch (e) {
+        console.warn('loadStats failed:', e);
+      }
     }
 
     // --- Feeds ---
@@ -696,7 +721,9 @@
       const tbody = document.getElementById('feeds-tbody');
       try {
         const r = await fetch('/api/feeds');
-        cache.feeds = await r.json();
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const data = await r.json();
+        cache.feeds = Array.isArray(data) ? data : [];
         if (cache.feeds.length === 0) {
           tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No RSS feeds configured. Click "+ Add New Feed" to get started.</td></tr>';
           return;
@@ -705,20 +732,22 @@
           <tr>
             <td><strong>${escapeHtml(f.name)}</strong></td>
             <td><a href="${escapeHtml(f.url)}" target="_blank" style="color: var(--accent-cyan); text-decoration: none;">${escapeHtml(f.url)}</a></td>
-            <td>${f.fetch_interval_minutes}m</td>
+            <td>${f.fetch_interval_minutes || 15}m</td>
             <td>
-              ${f.include_keywords && f.include_keywords.length ? `<span class="badge badge-info">+${f.include_keywords.join(', ')}</span> ` : ''}
-              ${f.exclude_keywords && f.exclude_keywords.length ? `<span class="badge badge-error">-${f.exclude_keywords.join(', ')}</span>` : '-'}
+              ${f.include_keywords && f.include_keywords.length ? `<span class="badge badge-info">+${f.include_keywords.map(escapeHtml).join(', ')}</span> ` : ''}
+              ${f.exclude_keywords && f.exclude_keywords.length ? `<span class="badge badge-error">-${f.exclude_keywords.map(escapeHtml).join(', ')}</span>` : '-'}
             </td>
-            <td><span class="badge ${f.last_status === 'ok' ? 'badge-success' : 'badge-error'}">${f.last_status}</span></td>
+            <td><span class="badge ${f.last_status === 'ok' ? 'badge-success' : 'badge-error'}">${escapeHtml(f.last_status || 'unknown')}</span></td>
             <td>
-              <button class="btn btn-secondary" style="padding: 0.3rem 0.6rem;" onclick="editFeed('${f.id}')">✏️ Edit</button>
-              <button class="btn btn-secondary" style="padding: 0.3rem 0.6rem;" onclick="fetchSingleFeed('${f.id}')">🔄 Sync</button>
-              <button class="btn btn-danger" style="padding: 0.3rem 0.6rem;" onclick="deleteFeed('${f.id}')">🗑️</button>
+              <button class="btn btn-secondary" style="padding: 0.3rem 0.6rem;" onclick="editFeed('${escapeHtml(f.id)}')">✏️ Edit</button>
+              <button class="btn btn-secondary" style="padding: 0.3rem 0.6rem;" onclick="fetchSingleFeed('${escapeHtml(f.id)}')">🔄 Sync</button>
+              <button class="btn btn-danger" style="padding: 0.3rem 0.6rem;" onclick="deleteFeed('${escapeHtml(f.id)}')">🗑️</button>
             </td>
           </tr>
         `).join('');
       } catch (e) {
+        console.error('loadFeeds failed:', e);
+        cache.feeds = [];
         tbody.innerHTML = '<tr><td colspan="6" style="color: var(--accent-red);">Error loading feeds</td></tr>';
       }
     }
@@ -728,7 +757,9 @@
       const tbody = document.getElementById('webhooks-tbody');
       try {
         const r = await fetch('/api/webhooks');
-        cache.webhooks = await r.json();
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const data = await r.json();
+        cache.webhooks = Array.isArray(data) ? data : [];
         if (cache.webhooks.length === 0) {
           tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No destinations configured. Click "+ Add New Webhook" to create one.</td></tr>';
           return;
@@ -742,16 +773,18 @@
             <td><strong>${escapeHtml(w.name)}</strong></td>
             <td style="font-family: monospace; font-size: 0.8rem; color: var(--text-muted);">${details}</td>
             <td>${targetBadge}</td>
-            <td><span style="display:inline-block; width:14px; height:14px; background:${w.color || '#5865F2'}; border-radius:3px; vertical-align:middle;"></span> ${w.color || '#5865F2'}</td>
+            <td><span style="display:inline-block; width:14px; height:14px; background:${w.color || '#5865F2'}; border-radius:3px; vertical-align:middle;"></span> ${escapeHtml(w.color || '#5865F2')}</td>
             <td><span class="badge badge-success">Active</span></td>
             <td>
-              <button class="btn btn-secondary" style="padding: 0.3rem 0.6rem;" onclick="editWebhook('${w.id}')">✏️ Edit</button>
-              <button class="btn btn-secondary" style="padding: 0.3rem 0.6rem;" onclick="testWebhook('${w.id}')">🧪 Test</button>
-              <button class="btn btn-danger" style="padding: 0.3rem 0.6rem;" onclick="deleteWebhook('${w.id}')">🗑️</button>
+              <button class="btn btn-secondary" style="padding: 0.3rem 0.6rem;" onclick="editWebhook('${escapeHtml(w.id)}')">✏️ Edit</button>
+              <button class="btn btn-secondary" style="padding: 0.3rem 0.6rem;" onclick="testWebhook('${escapeHtml(w.id)}')">🧪 Test</button>
+              <button class="btn btn-danger" style="padding: 0.3rem 0.6rem;" onclick="deleteWebhook('${escapeHtml(w.id)}')">🗑️</button>
             </td>
           </tr>
         `}).join('');
       } catch (e) {
+        console.error('loadWebhooks failed:', e);
+        cache.webhooks = [];
         tbody.innerHTML = '<tr><td colspan="6" style="color: var(--accent-red);">Error loading webhooks</td></tr>';
       }
     }
@@ -761,13 +794,17 @@
       const tbody = document.getElementById('routes-tbody');
       try {
         const r = await fetch('/api/routes');
-        cache.routes = await r.json();
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const data = await r.json();
+        cache.routes = Array.isArray(data) ? data : [];
         if (cache.routes.length === 0) {
           tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No routes configured. Click "+ Create New Route" to link a feed to a destination.</td></tr>';
           return;
         }
-        const feedName = id => (cache.feeds.find(f => f.id === id) || {}).name || id;
-        const whName = id => (cache.webhooks.find(w => w.id === id) || {}).name || id;
+        const feeds = Array.isArray(cache.feeds) ? cache.feeds : [];
+        const webhooks = Array.isArray(cache.webhooks) ? cache.webhooks : [];
+        const feedName = id => (feeds.find(f => f.id === id) || {}).name || id;
+        const whName = id => (webhooks.find(w => w.id === id) || {}).name || id;
         tbody.innerHTML = cache.routes.map(rt => `
           <tr>
             <td><strong>${escapeHtml(rt.name)}</strong></td>
@@ -776,12 +813,14 @@
             <td>${rt.message_prefix ? escapeHtml(rt.message_prefix) : '-'}</td>
             <td><span class="badge ${rt.enabled === false ? 'badge-error' : 'badge-success'}">${rt.enabled === false ? 'Disabled' : 'Active'}</span></td>
             <td>
-              <button class="btn btn-secondary" style="padding: 0.3rem 0.6rem;" onclick="editRoute('${rt.id}')">✏️ Edit</button>
-              <button class="btn btn-danger" style="padding: 0.3rem 0.6rem;" onclick="deleteRoute('${rt.id}')">🗑️</button>
+              <button class="btn btn-secondary" style="padding: 0.3rem 0.6rem;" onclick="editRoute('${escapeHtml(rt.id)}')">✏️ Edit</button>
+              <button class="btn btn-danger" style="padding: 0.3rem 0.6rem;" onclick="deleteRoute('${escapeHtml(rt.id)}')">🗑️</button>
             </td>
           </tr>
         `).join('');
       } catch (e) {
+        console.error('loadRoutes failed:', e);
+        cache.routes = [];
         tbody.innerHTML = '<tr><td colspan="6" style="color: var(--accent-red);">Error loading routes</td></tr>';
       }
     }
@@ -791,7 +830,9 @@
       const tbody = document.getElementById('logs-tbody');
       try {
         const r = await fetch('/api/logs');
-        const logs = await r.json();
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const data = await r.json();
+        const logs = Array.isArray(data) ? data : [];
         if (!logs.length) {
           tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No deliveries yet.</td></tr>';
           return;
@@ -807,44 +848,64 @@
           </tr>
         `).join('');
       } catch (e) {
+        console.error('loadLogs failed:', e);
         tbody.innerHTML = '<tr><td colspan="6" style="color: var(--accent-red);">Error loading logs</td></tr>';
       }
     }
 
     // --- Color picker helpers ---
     function setColorValues(textId, pickerId, value, fallback) {
-      document.getElementById(textId).value = value || '';
-      document.getElementById(pickerId).value = /^#[0-9a-fA-F]{6}$/.test(value || '') ? value : fallback;
+      const textElem = document.getElementById(textId);
+      const pickerElem = document.getElementById(pickerId);
+      if (textElem) textElem.value = value || '';
+      if (pickerElem) pickerElem.value = /^#[0-9a-fA-F]{6}$/.test(value || '') ? value : fallback;
     }
 
     function syncColorPicker(textId, pickerId) {
-      let v = document.getElementById(textId).value.trim();
+      const textElem = document.getElementById(textId);
+      const pickerElem = document.getElementById(pickerId);
+      if (!textElem || !pickerElem) return;
+      let v = textElem.value.trim();
       if (v && !v.startsWith('#')) v = '#' + v;
-      if (/^#[0-9a-fA-F]{6}$/.test(v)) document.getElementById(pickerId).value = v;
+      if (/^#[0-9a-fA-F]{6}$/.test(v)) pickerElem.value = v;
     }
 
     function toggleTargetFields(type) {
+      const discordFields = document.getElementById('discord-fields');
+      const telegramFields = document.getElementById('telegram-fields');
+      const urlInput = document.getElementById('webhook-url');
+      const tokenInput = document.getElementById('webhook-telegram-token');
+      const chatIdInput = document.getElementById('webhook-telegram-chatid');
+
       if (type === 'telegram') {
-        document.getElementById('discord-fields').style.display = 'none';
-        document.getElementById('telegram-fields').style.display = 'block';
-        document.getElementById('webhook-url').required = false;
-        document.getElementById('webhook-telegram-token').required = true;
-        document.getElementById('webhook-telegram-chatid').required = true;
+        if (discordFields) discordFields.style.display = 'none';
+        if (telegramFields) telegramFields.style.display = 'block';
+        if (urlInput) urlInput.required = false;
+        if (tokenInput) tokenInput.required = true;
+        if (chatIdInput) chatIdInput.required = true;
       } else {
-        document.getElementById('discord-fields').style.display = 'block';
-        document.getElementById('telegram-fields').style.display = 'none';
-        document.getElementById('webhook-url').required = true;
-        document.getElementById('webhook-telegram-token').required = false;
-        document.getElementById('webhook-telegram-chatid').required = false;
+        if (discordFields) discordFields.style.display = 'block';
+        if (telegramFields) telegramFields.style.display = 'none';
+        if (urlInput) urlInput.required = true;
+        if (tokenInput) tokenInput.required = false;
+        if (chatIdInput) chatIdInput.required = false;
       }
     }
 
     // Modal Helpers
-    function openModal(id) { document.getElementById(id).classList.add('active'); }
-    function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+    function openModal(id) {
+      const elem = document.getElementById(id);
+      if (elem) elem.classList.add('active');
+    }
+
+    function closeModal(id) {
+      const elem = document.getElementById(id);
+      if (elem) elem.classList.remove('active');
+    }
 
     function openFeedModal() {
-      document.getElementById('feed-form').reset();
+      const form = document.getElementById('feed-form');
+      if (form) form.reset();
       document.getElementById('feed-id').value = '';
       document.getElementById('feed-modal-title').innerText = 'Add RSS Feed';
       setColorValues('feed-color', 'feed-color-picker', '', '#5865F2');
@@ -852,7 +913,8 @@
     }
 
     function openWebhookModal() {
-      document.getElementById('webhook-form').reset();
+      const form = document.getElementById('webhook-form');
+      if (form) form.reset();
       document.getElementById('webhook-id').value = '';
       document.getElementById('webhook-modal-title').innerText = 'Add Destination Target';
       document.getElementById('webhook-target-type').value = 'discord';
@@ -862,27 +924,41 @@
     }
 
     function openRouteModal() {
-      document.getElementById('route-form').reset();
+      const form = document.getElementById('route-form');
+      if (form) form.reset();
       document.getElementById('route-id').value = '';
       document.getElementById('route-modal-title').innerText = 'Create Route Mapping';
       
       const feedSelect = document.getElementById('route-feed-id');
       const webhookSelect = document.getElementById('route-webhook-id');
+
+      const feeds = Array.isArray(cache.feeds) ? cache.feeds : [];
+      const webhooks = Array.isArray(cache.webhooks) ? cache.webhooks : [];
+
+      if (feeds.length === 0) {
+        showToast('Please add at least one RSS feed first', true);
+        return;
+      }
+      if (webhooks.length === 0) {
+        showToast('Please add at least one destination first', true);
+        return;
+      }
       
-      feedSelect.innerHTML = cache.feeds.map(f => `<option value="${f.id}">${escapeHtml(f.name)}</option>`).join('');
-      webhookSelect.innerHTML = cache.webhooks.map(w => `<option value="${w.id}">${escapeHtml(w.name)}</option>`).join('');
+      feedSelect.innerHTML = feeds.map(f => `<option value="${escapeHtml(f.id)}">${escapeHtml(f.name)}</option>`).join('');
+      webhookSelect.innerHTML = webhooks.map(w => `<option value="${escapeHtml(w.id)}">${escapeHtml(w.name)}</option>`).join('');
       
       openModal('route-modal');
     }
 
     // Edit Handlers
     function editFeed(id) {
-      const f = cache.feeds.find(item => item.id === id);
-      if (!f) return;
+      const feeds = Array.isArray(cache.feeds) ? cache.feeds : [];
+      const f = feeds.find(item => item.id === id);
+      if (!f) return showToast('Feed not found', true);
       document.getElementById('feed-modal-title').innerText = 'Edit RSS Feed';
       document.getElementById('feed-id').value = f.id;
-      document.getElementById('feed-name').value = f.name;
-      document.getElementById('feed-url').value = f.url;
+      document.getElementById('feed-name').value = f.name || '';
+      document.getElementById('feed-url').value = f.url || '';
       document.getElementById('feed-interval').value = f.fetch_interval_minutes || 15;
       document.getElementById('feed-include').value = (f.include_keywords || []).join(', ');
       document.getElementById('feed-exclude').value = (f.exclude_keywords || []).join(', ');
@@ -891,11 +967,12 @@
     }
 
     function editWebhook(id) {
-      const w = cache.webhooks.find(item => item.id === id);
-      if (!w) return;
+      const webhooks = Array.isArray(cache.webhooks) ? cache.webhooks : [];
+      const w = webhooks.find(item => item.id === id);
+      if (!w) return showToast('Destination not found', true);
       document.getElementById('webhook-modal-title').innerText = 'Edit Destination Target';
       document.getElementById('webhook-id').value = w.id;
-      document.getElementById('webhook-name').value = w.name;
+      document.getElementById('webhook-name').value = w.name || '';
       const tType = w.target_type || 'discord';
       document.getElementById('webhook-target-type').value = tType;
       toggleTargetFields(tType);
@@ -910,16 +987,20 @@
     }
 
     function editRoute(id) {
-      const rt = cache.routes.find(item => item.id === id);
-      if (!rt) return;
+      const routes = Array.isArray(cache.routes) ? cache.routes : [];
+      const rt = routes.find(item => item.id === id);
+      if (!rt) return showToast('Route not found', true);
       document.getElementById('route-modal-title').innerText = 'Edit Route Mapping';
       document.getElementById('route-id').value = rt.id;
-      document.getElementById('route-name').value = rt.name;
+      document.getElementById('route-name').value = rt.name || '';
 
       const feedSelect = document.getElementById('route-feed-id');
       const webhookSelect = document.getElementById('route-webhook-id');
-      feedSelect.innerHTML = cache.feeds.map(f => `<option value="${f.id}">${escapeHtml(f.name)}</option>`).join('');
-      webhookSelect.innerHTML = cache.webhooks.map(w => `<option value="${w.id}">${escapeHtml(w.name)}</option>`).join('');
+      const feeds = Array.isArray(cache.feeds) ? cache.feeds : [];
+      const webhooks = Array.isArray(cache.webhooks) ? cache.webhooks : [];
+
+      feedSelect.innerHTML = feeds.map(f => `<option value="${escapeHtml(f.id)}">${escapeHtml(f.name)}</option>`).join('');
+      webhookSelect.innerHTML = webhooks.map(w => `<option value="${escapeHtml(w.id)}">${escapeHtml(w.name)}</option>`).join('');
 
       feedSelect.value = rt.feed_id;
       webhookSelect.value = rt.webhook_id;
@@ -934,23 +1015,28 @@
         id: document.getElementById('feed-id').value || undefined,
         name: document.getElementById('feed-name').value,
         url: document.getElementById('feed-url').value,
-        fetch_interval_minutes: parseInt(document.getElementById('feed-interval').value),
+        fetch_interval_minutes: parseInt(document.getElementById('feed-interval').value) || 15,
         include_keywords: document.getElementById('feed-include').value,
         exclude_keywords: document.getElementById('feed-exclude').value,
         custom_color: document.getElementById('feed-color').value || null
       };
 
-      const r = await fetch('/api/feeds', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
-      });
-      if (r.ok) {
-        closeModal('feed-modal');
-        showToast('Feed saved successfully');
-        loadAll();
-      } else {
-        showToast('Failed to save feed', true);
+      try {
+        const r = await fetch('/api/feeds', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(data)
+        });
+        if (r.ok) {
+          closeModal('feed-modal');
+          showToast('Feed saved successfully');
+          loadAll();
+        } else {
+          const err = await r.json().catch(() => ({}));
+          showToast(`Failed to save feed: ${err.detail || r.statusText}`, true);
+        }
+      } catch (err) {
+        showToast('Network error saving feed', true);
       }
     }
 
@@ -969,17 +1055,22 @@
         color: document.getElementById('webhook-color').value || '#5865F2'
       };
 
-      const r = await fetch('/api/webhooks', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
-      });
-      if (r.ok) {
-        closeModal('webhook-modal');
-        showToast('Destination saved successfully');
-        loadAll();
-      } else {
-        showToast('Failed to save destination', true);
+      try {
+        const r = await fetch('/api/webhooks', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(data)
+        });
+        if (r.ok) {
+          closeModal('webhook-modal');
+          showToast('Destination saved successfully');
+          loadAll();
+        } else {
+          const err = await r.json().catch(() => ({}));
+          showToast(`Failed to save destination: ${err.detail || r.statusText}`, true);
+        }
+      } catch (err) {
+        showToast('Network error saving destination', true);
       }
     }
 
@@ -996,72 +1087,104 @@
         message_prefix: document.getElementById('route-prefix').value || null
       };
 
-      const r = await fetch('/api/routes', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
-      });
-      if (r.ok) {
-        closeModal('route-modal');
-        showToast('Route created successfully');
-        loadAll();
-      } else {
-        showToast('Failed to create route', true);
+      try {
+        const r = await fetch('/api/routes', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(data)
+        });
+        if (r.ok) {
+          closeModal('route-modal');
+          showToast('Route saved successfully');
+          loadAll();
+        } else {
+          const err = await r.json().catch(() => ({}));
+          showToast(`Failed to save route: ${err.detail || r.statusText}`, true);
+        }
+      } catch (err) {
+        showToast('Network error saving route', true);
       }
     }
 
     // Delete Handlers
     async function deleteFeed(id) {
       if (!confirm('Are you sure you want to delete this feed?')) return;
-      const r = await fetch(`/api/feeds/${id}`, { method: 'DELETE' });
-      if (r.ok) { showToast('Feed deleted'); loadAll(); }
+      try {
+        const r = await fetch(`/api/feeds/${id}`, { method: 'DELETE' });
+        if (r.ok) { showToast('Feed deleted'); loadAll(); }
+        else { showToast('Failed to delete feed', true); }
+      } catch (err) {
+        showToast('Network error deleting feed', true);
+      }
     }
 
     async function deleteWebhook(id) {
-      if (!confirm('Are you sure you want to delete this webhook?')) return;
-      const r = await fetch(`/api/webhooks/${id}`, { method: 'DELETE' });
-      if (r.ok) { showToast('Webhook deleted'); loadAll(); }
+      if (!confirm('Are you sure you want to delete this webhook/destination?')) return;
+      try {
+        const r = await fetch(`/api/webhooks/${id}`, { method: 'DELETE' });
+        if (r.ok) { showToast('Destination deleted'); loadAll(); }
+        else { showToast('Failed to delete destination', true); }
+      } catch (err) {
+        showToast('Network error deleting destination', true);
+      }
     }
 
     async function deleteRoute(id) {
       if (!confirm('Are you sure you want to delete this route?')) return;
-      const r = await fetch(`/api/routes/${id}`, { method: 'DELETE' });
-      if (r.ok) { showToast('Route deleted'); loadAll(); }
+      try {
+        const r = await fetch(`/api/routes/${id}`, { method: 'DELETE' });
+        if (r.ok) { showToast('Route deleted'); loadAll(); }
+        else { showToast('Failed to delete route', true); }
+      } catch (err) {
+        showToast('Network error deleting route', true);
+      }
     }
 
     // Action Triggers
     async function testWebhook(id) {
       showToast('Sending test message...');
-      const r = await fetch(`/api/webhooks/${id}/test`, { method: 'POST' });
-      if (r.ok) {
-        showToast('Test message delivered!');
-      } else {
-        const err = await r.json();
-        showToast(`Test failed: ${err.detail}`, true);
+      try {
+        const r = await fetch(`/api/webhooks/${id}/test`, { method: 'POST' });
+        if (r.ok) {
+          showToast('Test message delivered!');
+        } else {
+          const err = await r.json().catch(() => ({}));
+          showToast(`Test failed: ${err.detail || r.statusText}`, true);
+        }
+      } catch (err) {
+        showToast('Network error testing webhook', true);
       }
     }
 
     async function fetchSingleFeed(id) {
       showToast('Fetching feed...');
-      const r = await fetch(`/api/feeds/${id}/fetch`, { method: 'POST' });
-      if (r.ok) {
-        const res = await r.json();
-        showToast(`Sync complete! Dispatched: ${res.items_dispatched}, Skipped: ${res.items_skipped_duplicate}`);
-        loadAll();
-      } else {
-        showToast('Feed fetch failed', true);
+      try {
+        const r = await fetch(`/api/feeds/${id}/fetch`, { method: 'POST' });
+        if (r.ok) {
+          const res = await r.json();
+          showToast(`Sync complete! Dispatched: ${res.items_dispatched}, Skipped: ${res.items_skipped_duplicate}`);
+          loadAll();
+        } else {
+          showToast('Feed fetch failed', true);
+        }
+      } catch (err) {
+        showToast('Network error fetching feed', true);
       }
     }
 
     async function triggerSync() {
       showToast('Running full feed sync cycle...');
-      const r = await fetch('/api/sync', { method: 'POST' });
-      if (r.ok) {
-        const res = await r.json();
-        showToast(`Sync complete! Processed ${res.feeds_processed} feeds, Dispatched ${res.items_dispatched} items.`);
-        loadAll();
-      } else {
-        showToast('Sync cycle failed', true);
+      try {
+        const r = await fetch('/api/sync', { method: 'POST' });
+        if (r.ok) {
+          const res = await r.json();
+          showToast(`Sync complete! Processed ${res.feeds_processed} feeds, Dispatched ${res.items_dispatched} items.`);
+          loadAll();
+        } else {
+          showToast('Sync cycle failed', true);
+        }
+      } catch (err) {
+        showToast('Network error triggering sync', true);
       }
     }
 
@@ -1070,7 +1193,8 @@
     }
 
     async function runFeedPreview() {
-      const url = document.getElementById('preview-url').value;
+      const urlInput = document.getElementById('preview-url');
+      const url = urlInput ? urlInput.value.trim() : '';
       const resContainer = document.getElementById('preview-results');
       if (!url) return showToast('Please enter an RSS URL', true);
 
@@ -1083,8 +1207,8 @@
           body: JSON.stringify({ url })
         });
         if (!r.ok) {
-          const err = await r.json();
-          resContainer.innerHTML = `<p style="color: var(--accent-red);">${escapeHtml(err.detail)}</p>`;
+          const err = await r.json().catch(() => ({}));
+          resContainer.innerHTML = `<p style="color: var(--accent-red);">${escapeHtml(err.detail || r.statusText)}</p>`;
           return;
         }
 
