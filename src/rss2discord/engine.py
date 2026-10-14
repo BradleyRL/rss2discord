@@ -78,11 +78,6 @@ class RSSEngine:
                 stats["errors"].append({"feed_name": feed.name, "error": fetch_error})
                 continue
 
-            is_first_fetch = (
-                feed.last_fetched_at is None or
-                feed.last_status in ("never_fetched", "ok_no_routes", "no_routes") or
-                not self.storage.has_sent_items_for_feed(feed.id)
-            )
             self.storage.update_feed_fetch_status(feed.id, "ok")
             stats["items_found"] += len(items)
 
@@ -90,39 +85,49 @@ class RSSEngine:
             matching_items = [item for item in items if matches_filters(item, feed)]
             stats["items_skipped_filter"] += (len(items) - len(matching_items))
 
-            # Restrict initial dispatch on first run for newly added feed
-            if is_first_fetch and items:
-                init_mode = getattr(feed, "initial_fetch_mode", "latest_only") or "latest_only"
-                if init_mode == "latest_only":
-                    if matching_items:
-                        target_item = matching_items[0]
-                        items_to_process = [target_item]
+            for route in feed_routes:
+                webhook = all_webhooks[route.webhook_id]
+                target_type = getattr(webhook, "target_type", "discord") or "discord"
+
+                # Check if this route destination has ever had items sent or muted for this feed
+                is_first_route_run = not self.storage.has_sent_items_for_feed_and_webhook(feed.id, webhook.id)
+
+                if is_first_route_run and items:
+                    init_mode = getattr(feed, "initial_fetch_mode", "latest_only") or "latest_only"
+                    if init_mode == "latest_only":
+                        if matching_items:
+                            target_item = matching_items[0]
+                            route_items_to_send = [target_item]
+                            for other_item in items:
+                                if other_item.item_hash != target_item.item_hash:
+                                    self.storage.mark_item_sent(other_item.item_hash, feed.id, webhook.id)
+                            logger.info(
+                                f"First run for route '{route.name}' ({feed.name} -> {webhook.name} [{target_type}]): "
+                                f"Sending 1 latest story ('{target_item.title}'), muting {len(items)-1} historical stories."
+                            )
+                        else:
+                            route_items_to_send = []
+                            for other_item in items:
+                                self.storage.mark_item_sent(other_item.item_hash, feed.id, webhook.id)
+                            logger.info(
+                                f"First run for route '{route.name}' ({feed.name} -> {webhook.name} [{target_type}]): "
+                                f"No matching stories found. Muting all {len(items)} historical stories."
+                            )
+                    elif init_mode == "mute_all":
+                        route_items_to_send = []
                         for other_item in items:
-                            if other_item.item_hash != target_item.item_hash:
-                                for route in feed_routes:
-                                    self.storage.mark_item_sent(other_item.item_hash, feed.id, route.webhook_id)
-                        logger.info(f"First run for feed '{feed.name}': Sending 1 latest story ('{target_item.title}'), muting {len(items)-1} historical stories.")
-                    else:
-                        items_to_process = []
-                        for other_item in items:
-                            for route in feed_routes:
-                                self.storage.mark_item_sent(other_item.item_hash, feed.id, route.webhook_id)
-                elif init_mode == "mute_all":
-                    items_to_process = []
-                    for muted_item in items:
-                        for route in feed_routes:
-                            self.storage.mark_item_sent(muted_item.item_hash, feed.id, route.webhook_id)
-                    logger.info(f"First run for feed '{feed.name}': Muted all {len(items)} historical stories.")
+                            self.storage.mark_item_sent(other_item.item_hash, feed.id, webhook.id)
+                        logger.info(
+                            f"First run for route '{route.name}' ({feed.name} -> {webhook.name} [{target_type}]): "
+                            f"Muted all {len(items)} historical stories."
+                        )
+                    else:  # "all"
+                        route_items_to_send = matching_items
                 else:
-                    items_to_process = matching_items
-            else:
-                items_to_process = matching_items
+                    route_items_to_send = matching_items
 
-            for item in items_to_process:
-                item_hash = item.item_hash
-
-                for route in feed_routes:
-                    webhook = all_webhooks[route.webhook_id]
+                for item in route_items_to_send:
+                    item_hash = item.item_hash
 
                     # Check duplicate
                     if self.storage.is_item_sent(item_hash, webhook.id):
@@ -130,7 +135,6 @@ class RSSEngine:
                         continue
 
                     # Send to target (Discord or Telegram)
-                    target_type = getattr(webhook, "target_type", "discord") or "discord"
                     if target_type == "telegram":
                         success, error_msg = self.telegram_client.send_message(webhook, item, feed, route)
                     else:
@@ -154,10 +158,10 @@ class RSSEngine:
                         self.storage.mark_item_sent(item_hash, feed.id, webhook.id)
                         self.storage.add_log(log_entry)
                         stats["items_dispatched"] += 1
-                        logger.info(f"Dispatched item '{item.title}' from feed '{feed.name}' to webhook '{webhook.name}'")
+                        logger.info(f"Dispatched item '{item.title}' from feed '{feed.name}' to {target_type} target '{webhook.name}'")
                     else:
                         self.storage.add_log(log_entry)
-                        logger.error(f"Failed dispatching item '{item.title}' to webhook '{webhook.name}': {error_msg}")
+                        logger.error(f"Failed dispatching item '{item.title}' to {target_type} target '{webhook.name}': {error_msg}")
                         stats["errors"].append({"feed_name": feed.name, "webhook_name": webhook.name, "error": error_msg})
 
         return stats

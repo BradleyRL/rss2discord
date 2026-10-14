@@ -126,5 +126,102 @@ class TestRSS2Discord(unittest.TestCase):
         res_open = client_no_auth.get("/api/stats")
         self.assertEqual(res_open.status_code, 200)
 
+    def test_new_route_first_run_only_sends_one_item_discord_and_telegram(self):
+        from unittest.mock import MagicMock
+        from src.rss2discord.engine import RSSEngine
+
+        engine = RSSEngine(self.storage)
+
+        # 5 historical items in feed
+        feed_items = [
+            FeedItem(feed_id="f1", title=f"Story {i}", link=f"http://test/{i}", guid=f"guid-{i}", description="desc")
+            for i in range(5)
+        ]
+
+        engine.fetcher.fetch_feed = MagicMock(return_value=(feed_items, None))
+        engine.discord_client.send_embed = MagicMock(return_value=(True, None))
+        engine.telegram_client.send_message = MagicMock(return_value=(True, None))
+
+        # 1. Add Feed with latest_only
+        feed = self.storage.save_feed(FeedConfig(id="f1", name="Test Feed", url="http://feed.xml", initial_fetch_mode="latest_only"))
+
+        # 2. Add Route 1 to Discord
+        wh_discord = self.storage.save_webhook(WebhookConfig(id="wh-d1", name="Discord WH", url="http://discord/wh", target_type="discord"))
+        self.storage.save_route(RouteConfig(id="r1", name="F1 -> Discord", feed_id=feed.id, webhook_id=wh_discord.id))
+
+        # Sync 1: First run for Discord route
+        stats1 = engine.run_sync()
+        self.assertEqual(stats1["items_dispatched"], 1)
+        self.assertEqual(engine.discord_client.send_embed.call_count, 1)
+        self.assertEqual(engine.telegram_client.send_message.call_count, 0)
+        self.assertEqual(engine.discord_client.send_embed.call_args[0][1].title, "Story 0")
+
+        # Sync 2: Run again without changes -> 0 dispatched
+        engine.discord_client.send_embed.reset_mock()
+        engine.telegram_client.send_message.reset_mock()
+        stats2 = engine.run_sync()
+        self.assertEqual(stats2["items_dispatched"], 0)
+        self.assertEqual(engine.discord_client.send_embed.call_count, 0)
+        self.assertEqual(engine.telegram_client.send_message.call_count, 0)
+
+        # 3. Add Route 2 to Telegram for the SAME Feed!
+        wh_telegram = self.storage.save_webhook(WebhookConfig(
+            id="wh-tg1", name="Telegram Target", url="", target_type="telegram",
+            telegram_bot_token="token123", telegram_chat_id="@mychat"
+        ))
+        self.storage.save_route(RouteConfig(id="r2", name="F1 -> Telegram", feed_id=feed.id, webhook_id=wh_telegram.id))
+
+        # Sync 3: First run for Telegram route
+        engine.discord_client.send_embed.reset_mock()
+        engine.telegram_client.send_message.reset_mock()
+        stats3 = engine.run_sync()
+
+        # Discord receives 0 items (no new items in feed)
+        self.assertEqual(engine.discord_client.send_embed.call_count, 0)
+        # Telegram receives EXACTLY 1 item (the latest story, NOT all 5!)
+        self.assertEqual(engine.telegram_client.send_message.call_count, 1)
+        self.assertEqual(stats3["items_dispatched"], 1)
+        sent_tg_item = engine.telegram_client.send_message.call_args[0][1]
+        self.assertEqual(sent_tg_item.title, "Story 0")
+
+        # Sync 4: Run again -> 0 dispatched to either
+        engine.discord_client.send_embed.reset_mock()
+        engine.telegram_client.send_message.reset_mock()
+        stats4 = engine.run_sync()
+        self.assertEqual(stats4["items_dispatched"], 0)
+        self.assertEqual(engine.discord_client.send_embed.call_count, 0)
+        self.assertEqual(engine.telegram_client.send_message.call_count, 0)
+
+        # 4. Now a brand new story arrives in the feed
+        new_item = FeedItem(feed_id="f1", title="Brand New Story", link="http://test/new", guid="guid-new", description="new")
+        engine.fetcher.fetch_feed = MagicMock(return_value=([new_item] + feed_items, None))
+
+        # Sync 5: Both Discord and Telegram receive ONLY the 1 new item!
+        engine.discord_client.send_embed.reset_mock()
+        engine.telegram_client.send_message.reset_mock()
+        stats5 = engine.run_sync()
+        self.assertEqual(stats5["items_dispatched"], 2)
+        self.assertEqual(engine.discord_client.send_embed.call_count, 1)
+        self.assertEqual(engine.telegram_client.send_message.call_count, 1)
+        self.assertEqual(engine.discord_client.send_embed.call_args[0][1].title, "Brand New Story")
+        self.assertEqual(engine.telegram_client.send_message.call_args[0][1].title, "Brand New Story")
+
+        # 5. Add a SECOND Discord route for the same feed (e.g. #announcements)
+        wh_discord2 = self.storage.save_webhook(WebhookConfig(id="wh-d2", name="Discord 2", url="http://discord/wh2", target_type="discord"))
+        self.storage.save_route(RouteConfig(id="r3", name="F1 -> Discord 2", feed_id=feed.id, webhook_id=wh_discord2.id))
+
+        # Sync 6: First run for Discord 2
+        engine.discord_client.send_embed.reset_mock()
+        engine.telegram_client.send_message.reset_mock()
+        stats6 = engine.run_sync()
+
+        # Existing Discord 1 and Telegram receive 0
+        # Discord 2 receives EXACTLY 1 item (the latest: Brand New Story)
+        self.assertEqual(engine.telegram_client.send_message.call_count, 0)
+        self.assertEqual(engine.discord_client.send_embed.call_count, 1)
+        sent_to_d2 = engine.discord_client.send_embed.call_args[0][0]
+        self.assertEqual(sent_to_d2.id, "wh-d2")
+        self.assertEqual(engine.discord_client.send_embed.call_args[0][1].title, "Brand New Story")
+
 if __name__ == "__main__":
     unittest.main()

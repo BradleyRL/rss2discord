@@ -330,6 +330,14 @@ class Storage:
             ).fetchone()
             return row is not None
 
+    def has_sent_items_for_feed_and_webhook(self, feed_id: str, webhook_id: str) -> bool:
+        with self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM sent_history WHERE feed_id = ? AND webhook_id = ? LIMIT 1",
+                (feed_id, webhook_id)
+            ).fetchone()
+            return row is not None
+
     def mark_item_sent(self, item_hash: str, feed_id: str, webhook_id: str):
         now = datetime.now(timezone.utc).isoformat()
         with self._get_connection() as conn:
